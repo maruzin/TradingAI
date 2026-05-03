@@ -22,11 +22,38 @@ import numpy as np
 import pandas as pd
 
 PatternKind = Literal[
+    # Reversal
     "double_top", "double_bottom",
+    "triple_top", "triple_bottom",
     "head_and_shoulders", "inverse_head_and_shoulders",
+    "rounding_top", "rounding_bottom",
+    "v_reversal_bull", "v_reversal_bear",
+    "broadening_top", "broadening_bottom",
+    # Continuation
     "ascending_triangle", "descending_triangle", "symmetrical_triangle",
     "rising_wedge", "falling_wedge",
     "bull_flag", "bear_flag",
+    "bull_pennant", "bear_pennant",
+    "rectangle", "channel_up", "channel_down",
+    "cup_and_handle", "inverse_cup_and_handle",
+    # SMC / institutional flow
+    "bullish_order_block", "bearish_order_block",
+    "fvg_bullish", "fvg_bearish",
+    "liquidity_sweep_high", "liquidity_sweep_low",
+    "equal_highs", "equal_lows",
+    "breaker_block_bull", "breaker_block_bear",
+    # Candlestick (single + multi-bar)
+    "hammer", "hanging_man",
+    "shooting_star", "inverted_hammer",
+    "doji", "dragonfly_doji", "gravestone_doji",
+    "engulfing_bull", "engulfing_bear",
+    "harami_bull", "harami_bear",
+    "morning_star", "evening_star",
+    "three_white_soldiers", "three_black_crows",
+    "marubozu_bull", "marubozu_bear",
+    "piercing_line", "dark_cloud_cover",
+    "tweezer_top", "tweezer_bottom",
+    "abandoned_baby_bull", "abandoned_baby_bear",
 ]
 DivergenceKind = Literal[
     "rsi_bullish_regular", "rsi_bearish_regular",
@@ -149,6 +176,15 @@ def analyze(
     patterns += _double_tops_bottoms(df, swings)
     patterns += _head_and_shoulders(df, swings)
     patterns += _triangles_and_wedges(df, swings)
+    patterns += _triple_tops_bottoms(df, swings)
+    patterns += _rectangles_and_channels(df, swings)
+    patterns += _rounding_and_v(df, swings)
+    patterns += _broadening(df, swings)
+    patterns += _cup_and_handle(df)
+    patterns += _flags_pennants(df, swings)
+    patterns += _smc_order_blocks_and_fvg(df)
+    patterns += _liquidity_sweeps_and_equal_levels(df, swings)
+    patterns += _candlesticks(df)
 
     divergences = _divergences(df, swings)
 
@@ -421,4 +457,407 @@ def _divergences(df: pd.DataFrame, swings: list[Swing]) -> list[DivergenceHit]:
         ma, mb = at(macd_hist, a.idx), at(macd_hist, b.idx)
         if ma is not None and mb is not None and b.price < a.price and mb > ma:
             out.append(DivergenceHit("macd_bullish_regular", a.idx, b.idx, 0.65))
+    return out
+
+
+# =============================================================================
+# Extended chart patterns
+# =============================================================================
+def _triple_tops_bottoms(df: pd.DataFrame, swings: list[Swing]) -> list[PatternHit]:
+    """Triple top: three highs at ~equal price separated by two troughs.
+    Triple bottom: mirror.
+    """
+    out: list[PatternHit] = []
+    highs = [s for s in swings if s.kind == "high"][-5:]
+    lows = [s for s in swings if s.kind == "low"][-5:]
+
+    def _eq(a: float, b: float, c: float, tol: float = 0.02) -> bool:
+        avg = (a + b + c) / 3
+        return all(abs(x - avg) / max(1e-9, avg) < tol for x in (a, b, c))
+
+    if len(highs) >= 3:
+        a, b, c = highs[-3], highs[-2], highs[-1]
+        if _eq(a.price, b.price, c.price) and a.idx < b.idx < c.idx:
+            confidence = 0.7 - min(0.3, abs(c.price - a.price) / max(1e-9, a.price))
+            target = float(df["low"].iloc[a.idx:c.idx].min())
+            out.append(PatternHit("triple_top", confidence, a.idx, c.idx, target=target,
+                                   notes="three roughly equal highs"))
+    if len(lows) >= 3:
+        a, b, c = lows[-3], lows[-2], lows[-1]
+        if _eq(a.price, b.price, c.price):
+            confidence = 0.7 - min(0.3, abs(c.price - a.price) / max(1e-9, a.price))
+            target = float(df["high"].iloc[a.idx:c.idx].max())
+            out.append(PatternHit("triple_bottom", confidence, a.idx, c.idx, target=target,
+                                   notes="three roughly equal lows"))
+    return out
+
+
+def _rectangles_and_channels(df: pd.DataFrame, swings: list[Swing]) -> list[PatternHit]:
+    """Rectangle: highs and lows in two near-horizontal bands.
+    Channel up/down: both bands sloped in the same direction.
+    """
+    out: list[PatternHit] = []
+    highs = [s for s in swings if s.kind == "high"][-4:]
+    lows = [s for s in swings if s.kind == "low"][-4:]
+    if len(highs) < 2 or len(lows) < 2:
+        return out
+
+    # linear fit on the last few swings
+    def _slope(points: list[Swing]) -> float:
+        xs = np.array([p.idx for p in points], dtype=float)
+        ys = np.array([p.price for p in points], dtype=float)
+        if len(xs) < 2 or xs.std() == 0:
+            return 0.0
+        return float(np.polyfit(xs, ys, 1)[0])
+
+    s_h = _slope(highs)
+    s_l = _slope(lows)
+    avg = (sum(p.price for p in highs) + sum(p.price for p in lows)) / (len(highs) + len(lows))
+    flat_thresh = avg * 0.001  # ~0.1% per bar
+    same_dir = (s_h > flat_thresh and s_l > flat_thresh) or (s_h < -flat_thresh and s_l < -flat_thresh)
+
+    if abs(s_h) < flat_thresh and abs(s_l) < flat_thresh:
+        out.append(PatternHit("rectangle", 0.6, highs[0].idx, highs[-1].idx,
+                               notes=f"highs slope {s_h:.4f}, lows slope {s_l:.4f}"))
+    elif same_dir and s_h > 0:
+        out.append(PatternHit("channel_up", 0.6, lows[0].idx, lows[-1].idx,
+                               notes="parallel rising channel"))
+    elif same_dir and s_h < 0:
+        out.append(PatternHit("channel_down", 0.6, highs[0].idx, highs[-1].idx,
+                               notes="parallel falling channel"))
+    return out
+
+
+def _rounding_and_v(df: pd.DataFrame, swings: list[Swing]) -> list[PatternHit]:
+    """Rounding bottom/top: smooth U/inverse-U over a long window.
+    V-reversal: sharp single-bar reversal at recent swing.
+    """
+    out: list[PatternHit] = []
+    close = df["close"].astype(float).values
+    n = len(close)
+    if n < 60:
+        return out
+
+    window = close[-60:]
+    fitted = np.polyfit(np.arange(len(window)), window, 2)
+    a, b, c = fitted
+    # Concavity tells you U vs inverse-U; check fit quality crudely
+    pred = np.polyval(fitted, np.arange(len(window)))
+    sse = float(((window - pred) ** 2).sum())
+    sst = float(((window - window.mean()) ** 2).sum() or 1.0)
+    r2 = 1.0 - sse / sst
+    if r2 > 0.5:
+        if a > 0 and window[-1] > window[0]:
+            out.append(PatternHit("rounding_bottom", min(1.0, r2), n - 60, n - 1,
+                                   notes=f"R² {r2:.2f}"))
+        elif a < 0 and window[-1] < window[0]:
+            out.append(PatternHit("rounding_top", min(1.0, r2), n - 60, n - 1,
+                                   notes=f"R² {r2:.2f}"))
+
+    # V-reversal: latest swing is far from the prior swing on opposite side
+    if len(swings) >= 2:
+        last, prev = swings[-1], swings[-2]
+        if last.kind != prev.kind and (last.idx - prev.idx) <= 8:
+            move = abs(last.price - prev.price) / max(1e-9, prev.price)
+            if move > 0.05:
+                kind = "v_reversal_bull" if last.kind == "low" else "v_reversal_bear"
+                out.append(PatternHit(kind, 0.6, prev.idx, last.idx,  # type: ignore[arg-type]
+                                       notes=f"sharp reversal {move*100:.1f}% in {last.idx-prev.idx} bars"))
+    return out
+
+
+def _broadening(df: pd.DataFrame, swings: list[Swing]) -> list[PatternHit]:
+    """Broadening / megaphone: highs make HH and lows make LL — divergent slopes."""
+    out: list[PatternHit] = []
+    highs = [s for s in swings if s.kind == "high"][-3:]
+    lows = [s for s in swings if s.kind == "low"][-3:]
+    if len(highs) < 2 or len(lows) < 2:
+        return out
+    rising_highs = highs[-1].price > highs[0].price
+    falling_lows = lows[-1].price < lows[0].price
+    if rising_highs and falling_lows:
+        last_close = float(df["close"].iloc[-1])
+        kind = "broadening_top" if last_close < (highs[-1].price + lows[-1].price) / 2 else "broadening_bottom"
+        out.append(PatternHit(kind, 0.6, min(highs[0].idx, lows[0].idx), max(highs[-1].idx, lows[-1].idx),  # type: ignore[arg-type]
+                               notes="divergent swing structure"))
+    return out
+
+
+def _cup_and_handle(df: pd.DataFrame) -> list[PatternHit]:
+    """Cup & handle: rounding bottom (~30 bars) followed by a small consolidation.
+    Inverse cup: mirror.
+    """
+    out: list[PatternHit] = []
+    close = df["close"].astype(float).values
+    if len(close) < 50:
+        return out
+    cup = close[-50:-10]
+    handle = close[-10:]
+    fitted = np.polyfit(np.arange(len(cup)), cup, 2)
+    a = fitted[0]
+    cup_depth = (cup.max() - cup.min()) / max(1e-9, cup.max())
+    handle_range = (handle.max() - handle.min()) / max(1e-9, handle.mean())
+
+    if a > 0 and cup_depth > 0.05 and cup[0] > cup.min() and cup[-1] > cup.min() and handle_range < cup_depth * 0.6:
+        out.append(PatternHit("cup_and_handle", 0.6, len(close) - 50, len(close) - 1,
+                               target=float(cup.max() * (1 + cup_depth)),
+                               notes=f"cup depth {cup_depth*100:.1f}%, handle range {handle_range*100:.1f}%"))
+    if a < 0 and cup_depth > 0.05 and handle_range < cup_depth * 0.6:
+        out.append(PatternHit("inverse_cup_and_handle", 0.55, len(close) - 50, len(close) - 1,
+                               target=float(cup.min() * (1 - cup_depth)),
+                               notes="inverted-U with tight upper consolidation"))
+    return out
+
+
+def _flags_pennants(df: pd.DataFrame, swings: list[Swing]) -> list[PatternHit]:
+    """Bull/bear flag and pennant: a strong impulse followed by a small
+    counter-trend consolidation. Distinguish flag (parallel) from pennant
+    (converging).
+    """
+    out: list[PatternHit] = []
+    close = df["close"].astype(float).values
+    n = len(close)
+    if n < 30:
+        return out
+    impulse = close[-30:-15]
+    consol = close[-15:]
+    impulse_move = (impulse[-1] - impulse[0]) / max(1e-9, impulse[0])
+    consol_range = (consol.max() - consol.min()) / max(1e-9, consol.mean())
+    if abs(impulse_move) < 0.06 or consol_range > abs(impulse_move) * 0.7:
+        return out
+
+    # converging vs parallel: linear fit slopes of consol high vs low
+    cons_high = pd.Series(consol).rolling(3).max().dropna().values
+    cons_low = pd.Series(consol).rolling(3).min().dropna().values
+    if len(cons_high) < 4:
+        return out
+    s_h = float(np.polyfit(np.arange(len(cons_high)), cons_high, 1)[0])
+    s_l = float(np.polyfit(np.arange(len(cons_low)), cons_low, 1)[0])
+    converging = (s_h < 0 and s_l > 0) or (s_h * s_l < 0)
+
+    if impulse_move > 0:
+        kind = "bull_pennant" if converging else "bull_flag"
+    else:
+        kind = "bear_pennant" if converging else "bear_flag"
+    out.append(PatternHit(kind, 0.6, n - 30, n - 1,  # type: ignore[arg-type]
+                           target=float(consol[-1] * (1 + impulse_move)),
+                           notes=f"impulse {impulse_move*100:+.1f}%, consol {consol_range*100:.1f}%"))
+    return out
+
+
+# =============================================================================
+# SMC: Order Blocks, Fair Value Gaps, Liquidity Sweeps, Equal Highs/Lows
+# =============================================================================
+def _smc_order_blocks_and_fvg(df: pd.DataFrame) -> list[PatternHit]:
+    """Order Block: the last opposite-coloured candle before a strong impulse
+    that creates a Break of Structure. Approximation:
+      - Bullish OB: last bearish candle before ≥3 consecutive bullish candles
+        whose close exceeds prior swing high.
+      - Bearish OB: mirror.
+
+    Fair Value Gap (FVG): a 3-bar formation where bar[n].low > bar[n-2].high
+    (bullish FVG = imbalance up) or bar[n].high < bar[n-2].low (bearish FVG).
+    """
+    out: list[PatternHit] = []
+    if len(df) < 10:
+        return out
+    o = df["open"].astype(float).values
+    h = df["high"].astype(float).values
+    l = df["low"].astype(float).values
+    c = df["close"].astype(float).values
+    n = len(c)
+
+    # FVG — scan last 50 bars; report up to last 5 unmitigated.
+    fvgs: list[PatternHit] = []
+    for i in range(max(2, n - 50), n):
+        if l[i] > h[i - 2]:
+            mitigated = bool((l[i+1:] <= h[i - 2]).any()) if i + 1 < n else False
+            if not mitigated:
+                fvgs.append(PatternHit(
+                    "fvg_bullish", 0.6, i - 2, i,
+                    notes=f"gap {h[i-2]:.4g} → {l[i]:.4g}",
+                ))
+        elif h[i] < l[i - 2]:
+            mitigated = bool((h[i+1:] >= l[i - 2]).any()) if i + 1 < n else False
+            if not mitigated:
+                fvgs.append(PatternHit(
+                    "fvg_bearish", 0.6, i - 2, i,
+                    notes=f"gap {l[i-2]:.4g} → {h[i]:.4g}",
+                ))
+    out.extend(fvgs[-5:])
+
+    # Order blocks — scan last 60 bars, look for 3+ same-direction follow-through.
+    for i in range(max(3, n - 60), n - 3):
+        body_i = c[i] - o[i]
+        run_up = c[i+1] > c[i] and c[i+2] > c[i+1] and c[i+3] > c[i+2]
+        run_dn = c[i+1] < c[i] and c[i+2] < c[i+1] and c[i+3] < c[i+2]
+        if body_i < 0 and run_up and c[i+3] > h[max(0, i-5):i].max():
+            out.append(PatternHit("bullish_order_block", 0.65, i, i + 3,
+                                   target=float(c[i+3] + (c[i+3] - l[i])),
+                                   notes=f"down candle followed by 3 up bars + BOS"))
+        if body_i > 0 and run_dn and c[i+3] < l[max(0, i-5):i].min():
+            out.append(PatternHit("bearish_order_block", 0.65, i, i + 3,
+                                   target=float(c[i+3] - (h[i] - c[i+3])),
+                                   notes="up candle followed by 3 down bars + BOS"))
+    return out[-8:]  # cap noise
+
+
+def _liquidity_sweeps_and_equal_levels(
+    df: pd.DataFrame, swings: list[Swing]
+) -> list[PatternHit]:
+    """Liquidity sweep (stop hunt): wick takes out a prior swing then closes
+    back inside. Equal highs / equal lows: two swings within 0.2% of each
+    other — magnets for liquidity raids.
+    """
+    out: list[PatternHit] = []
+    if len(df) < 5 or len(swings) < 3:
+        return out
+    h = df["high"].astype(float).values
+    l = df["low"].astype(float).values
+    c = df["close"].astype(float).values
+
+    last_swing_high = next((s for s in reversed(swings) if s.kind == "high"), None)
+    last_swing_low = next((s for s in reversed(swings) if s.kind == "low"), None)
+
+    # Latest 3 bars sweep test
+    for i in range(len(df) - 3, len(df)):
+        if last_swing_high and i > last_swing_high.idx:
+            if h[i] > last_swing_high.price and c[i] < last_swing_high.price:
+                out.append(PatternHit(
+                    "liquidity_sweep_high", 0.7, last_swing_high.idx, i,
+                    notes=f"sweep above {last_swing_high.price:.4g}, close back inside",
+                ))
+        if last_swing_low and i > last_swing_low.idx:
+            if l[i] < last_swing_low.price and c[i] > last_swing_low.price:
+                out.append(PatternHit(
+                    "liquidity_sweep_low", 0.7, last_swing_low.idx, i,
+                    notes=f"sweep below {last_swing_low.price:.4g}, close back inside",
+                ))
+
+    # Equal highs / equal lows on the most recent swings.
+    highs = [s for s in swings if s.kind == "high"][-2:]
+    lows = [s for s in swings if s.kind == "low"][-2:]
+    if len(highs) == 2 and abs(highs[0].price - highs[1].price) / max(1e-9, highs[0].price) < 0.002:
+        out.append(PatternHit("equal_highs", 0.6, highs[0].idx, highs[1].idx,
+                               notes="liquidity pool above"))
+    if len(lows) == 2 and abs(lows[0].price - lows[1].price) / max(1e-9, lows[0].price) < 0.002:
+        out.append(PatternHit("equal_lows", 0.6, lows[0].idx, lows[1].idx,
+                               notes="liquidity pool below"))
+    return out
+
+
+# =============================================================================
+# Candlestick patterns (single + multi-bar)
+# =============================================================================
+def _candlesticks(df: pd.DataFrame) -> list[PatternHit]:
+    """Detect classical candlestick patterns on the LAST bar (and 2-3 bar
+    combinations ending on the last bar). Conservative thresholds; the LLM
+    should weight by trend context, not in isolation.
+    """
+    out: list[PatternHit] = []
+    if len(df) < 5:
+        return out
+    o = df["open"].astype(float).values
+    h = df["high"].astype(float).values
+    l = df["low"].astype(float).values
+    c = df["close"].astype(float).values
+    n = len(c)
+    i = n - 1
+
+    body = abs(c[i] - o[i])
+    rng = max(1e-9, h[i] - l[i])
+    upper_wick = h[i] - max(c[i], o[i])
+    lower_wick = min(c[i], o[i]) - l[i]
+    body_pct = body / rng
+    is_bull = c[i] > o[i]
+    is_bear = c[i] < o[i]
+
+    # --- Doji family ---
+    if body_pct < 0.1:
+        if upper_wick / rng < 0.1 and lower_wick / rng > 0.7:
+            out.append(PatternHit("dragonfly_doji", 0.6, i, i, notes="long lower wick, body at top"))
+        elif lower_wick / rng < 0.1 and upper_wick / rng > 0.7:
+            out.append(PatternHit("gravestone_doji", 0.6, i, i, notes="long upper wick, body at bottom"))
+        else:
+            out.append(PatternHit("doji", 0.5, i, i, notes="indecision"))
+
+    # --- Hammer / hanging man / shooting star / inverted hammer ---
+    trend_up = c[i] > c[max(0, i - 5)]
+    trend_dn = c[i] < c[max(0, i - 5)]
+    if body_pct < 0.4 and lower_wick > 2 * body and upper_wick < body:
+        if trend_dn:
+            out.append(PatternHit("hammer", 0.65, i, i, notes="possible reversal up"))
+        elif trend_up:
+            out.append(PatternHit("hanging_man", 0.6, i, i, notes="caution at top"))
+    if body_pct < 0.4 and upper_wick > 2 * body and lower_wick < body:
+        if trend_up:
+            out.append(PatternHit("shooting_star", 0.65, i, i, notes="possible reversal down"))
+        elif trend_dn:
+            out.append(PatternHit("inverted_hammer", 0.55, i, i, notes="possible bottom forming"))
+
+    # --- Marubozu: open/close at extremes, near-zero wicks ---
+    if body_pct > 0.95 and upper_wick / rng < 0.05 and lower_wick / rng < 0.05:
+        out.append(PatternHit(
+            "marubozu_bull" if is_bull else "marubozu_bear", 0.7, i, i,
+            notes="full-body candle, strong continuation",
+        ))
+
+    # --- Two-bar patterns: engulfing, harami, piercing line, dark cloud, tweezers ---
+    if i >= 1:
+        prev_body = abs(c[i - 1] - o[i - 1])
+        prev_bull = c[i - 1] > o[i - 1]
+        prev_bear = c[i - 1] < o[i - 1]
+
+        if is_bull and prev_bear and c[i] >= o[i - 1] and o[i] <= c[i - 1]:
+            out.append(PatternHit("engulfing_bull", 0.7, i - 1, i, notes="full bullish engulf"))
+        if is_bear and prev_bull and o[i] >= c[i - 1] and c[i] <= o[i - 1]:
+            out.append(PatternHit("engulfing_bear", 0.7, i - 1, i, notes="full bearish engulf"))
+
+        if is_bull and prev_bear and o[i] > c[i - 1] and c[i] < o[i - 1] and body < prev_body * 0.7:
+            out.append(PatternHit("harami_bull", 0.55, i - 1, i, notes="inside-bar bullish"))
+        if is_bear and prev_bull and o[i] < c[i - 1] and c[i] > o[i - 1] and body < prev_body * 0.7:
+            out.append(PatternHit("harami_bear", 0.55, i - 1, i, notes="inside-bar bearish"))
+
+        # Piercing line: prev bear, curr bull, opens below prev low, closes >50% into prev body
+        if prev_bear and is_bull and o[i] < l[i - 1] and c[i] > (o[i - 1] + c[i - 1]) / 2:
+            out.append(PatternHit("piercing_line", 0.6, i - 1, i, notes="bullish reversal"))
+        # Dark cloud cover: mirror
+        if prev_bull and is_bear and o[i] > h[i - 1] and c[i] < (o[i - 1] + c[i - 1]) / 2:
+            out.append(PatternHit("dark_cloud_cover", 0.6, i - 1, i, notes="bearish reversal"))
+
+        # Tweezer top/bottom: two consecutive bars with ~equal high or ~equal low
+        if abs(h[i] - h[i - 1]) / max(1e-9, h[i]) < 0.0015 and prev_bull and is_bear:
+            out.append(PatternHit("tweezer_top", 0.55, i - 1, i, notes="matching highs"))
+        if abs(l[i] - l[i - 1]) / max(1e-9, l[i]) < 0.0015 and prev_bear and is_bull:
+            out.append(PatternHit("tweezer_bottom", 0.55, i - 1, i, notes="matching lows"))
+
+    # --- Three-bar patterns: morning/evening star, three soldiers/crows, abandoned baby ---
+    if i >= 2:
+        b0 = abs(c[i - 2] - o[i - 2])
+        b1 = abs(c[i - 1] - o[i - 1])
+        b2 = body
+        bull0 = c[i - 2] > o[i - 2]
+        bear0 = c[i - 2] < o[i - 2]
+        bull2 = is_bull
+        bear2 = is_bear
+        # Morning star: big bear, small body, big bull
+        if bear0 and b1 < b0 * 0.5 and bull2 and c[i] > (o[i - 2] + c[i - 2]) / 2:
+            out.append(PatternHit("morning_star", 0.7, i - 2, i, notes="3-bar bullish reversal"))
+        if bull0 and b1 < b0 * 0.5 and bear2 and c[i] < (o[i - 2] + c[i - 2]) / 2:
+            out.append(PatternHit("evening_star", 0.7, i - 2, i, notes="3-bar bearish reversal"))
+
+        # Abandoned baby: morning/evening star where the middle bar gaps
+        if bear0 and b1 < b0 * 0.4 and bull2 and h[i - 1] < l[i - 2] and l[i] > h[i - 1]:
+            out.append(PatternHit("abandoned_baby_bull", 0.75, i - 2, i, notes="island reversal up"))
+        if bull0 and b1 < b0 * 0.4 and bear2 and l[i - 1] > h[i - 2] and h[i] < l[i - 1]:
+            out.append(PatternHit("abandoned_baby_bear", 0.75, i - 2, i, notes="island reversal down"))
+
+        # Three white soldiers / three black crows
+        if (c[i - 2] > o[i - 2] and c[i - 1] > o[i - 1] and c[i] > o[i] and
+            c[i] > c[i - 1] > c[i - 2] and o[i] > o[i - 1] > o[i - 2]):
+            out.append(PatternHit("three_white_soldiers", 0.7, i - 2, i, notes="strong bullish thrust"))
+        if (c[i - 2] < o[i - 2] and c[i - 1] < o[i - 1] and c[i] < o[i] and
+            c[i] < c[i - 1] < c[i - 2] and o[i] < o[i - 1] < o[i - 2]):
+            out.append(PatternHit("three_black_crows", 0.7, i - 2, i, notes="strong bearish thrust"))
+
     return out
