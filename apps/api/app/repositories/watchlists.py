@@ -103,6 +103,39 @@ async def remove_item(user_id: str, watchlist_id: str, token_id: str) -> bool:
     return _affected(res) >= 1
 
 
+async def distinct_watched_pairs() -> list[str]:
+    """Every distinct token across all watchlists, formatted as a CCXT pair.
+
+    The setup watcher uses this so users get analyses for the tokens they
+    actually care about, not just the default universe.
+    """
+    rows = await db.fetch(
+        """
+        select distinct upper(t.symbol) as sym
+          from watchlist_items wi
+          join tokens t on t.id = wi.token_id
+         where t.symbol is not null and t.symbol <> ''
+        """
+    )
+    return [f"{r['sym']}/USDT" for r in rows]
+
+
+async def users_watching(pair: str) -> list[str]:
+    """Every user_id who has the token (matched by base symbol) on a watchlist."""
+    base = pair.split("/")[0].upper()
+    rows = await db.fetch(
+        """
+        select distinct w.user_id::text as user_id
+          from watchlists w
+          join watchlist_items wi on wi.watchlist_id = w.id
+          join tokens t on t.id = wi.token_id
+         where upper(t.symbol) = $1
+        """,
+        base,
+    )
+    return [r["user_id"] for r in rows if r["user_id"]]
+
+
 def _affected(res: str) -> int:
     try:
         return int(res.split()[-1])

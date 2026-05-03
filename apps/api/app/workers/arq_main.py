@@ -11,6 +11,8 @@ Schedules:
   daily_picks         07:00 UTC  (the Top-10 idea generator)
   backtest_evaluator  01:00 UTC daily
   gossip_poller       every 5 min
+  wallet_poller       every 5 min (offset 2 min so it doesn't collide)
+  setup_watcher       every 15 min
 """
 from __future__ import annotations
 
@@ -26,7 +28,9 @@ from . import (
     daily_picks,
     gossip_poller,
     price_poller,
+    setup_watcher,
     thesis_tracker,
+    wallet_poller,
 )
 
 
@@ -46,6 +50,8 @@ class WorkerSettings:
         cron(price_poller.run,        second=0,  minute={i for i in range(0, 60)}),
         cron(alert_dispatcher.run,    second={0, 30}, minute={i for i in range(0, 60)}),
         cron(gossip_poller.run,       minute={i for i in range(0, 60) if i % 5 == 0}),
+        cron(wallet_poller.run,       minute={i for i in range(0, 60) if i % 5 == 2}),
+        cron(setup_watcher.run,       minute={i for i in range(0, 60) if i % 15 == 7}),
         cron(thesis_tracker.run,      minute={7}),
         cron(daily_digest.run,        hour={9}, minute={0}),
         cron(daily_picks.cron_run,    hour={7}, minute={0}),

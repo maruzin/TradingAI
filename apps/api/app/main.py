@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .logging_setup import configure_logging, get_logger
-from .routes import alerts, auth, backtest, gossip, health, markets, picks, signals, system, theses, tokens, track_record, watchlists
+from .routes import alerts, auth, backtest, gossip, health, markets, picks, regime, signals, system, theses, tokens, track_record, wallets, watchlists
 from .settings import get_settings
 
 
@@ -63,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(gossip.router, prefix="/api/gossip", tags=["gossip"])
     app.include_router(track_record.router, prefix="/api/track-record", tags=["track-record"])
     app.include_router(system.router, prefix="/api/system", tags=["system"])
+    app.include_router(wallets.router, prefix="/api/wallets", tags=["wallets"])
+    app.include_router(regime.router, prefix="/api/regime", tags=["regime"])
 
     return app
 

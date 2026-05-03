@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..agents.analyst import AnalystAgent
+from ..agents.projection import project as project_token
 from ..auth import CurrentUser
 from ..deps import get_optional_user
 from ..logging_setup import get_logger
@@ -143,6 +144,54 @@ async def get_brief(
     )
 
     return brief.as_response()
+
+
+@router.get("/{symbol}/projection")
+async def get_projection(
+    symbol: str,
+    user: Annotated[CurrentUser | None, Depends(get_optional_user)] = None,
+    timeframe: str = Query("1d", pattern="^(1h|4h|1d)$"),
+) -> dict:
+    """LLM-written conditional projection grounded in the technical stack
+    (indicators + patterns + Wyckoff + Elliott + levels + MTF confluence).
+
+    Cheaper than a full brief — bounded by a 5/day per-user rate limit.
+    Admins exempt.
+    """
+    if user is None or not user.is_admin:
+        try:
+            enforce_rate_limit(
+                user_id=(user.id if user else "anon"),
+                action="projection",
+                limit=5,
+                window_seconds=BRIEF_WINDOW_SECONDS,
+            )
+        except RateLimitExceeded as e:
+            raise HTTPException(
+                status_code=429, detail=str(e),
+                headers={"Retry-After": str(e.retry_after_seconds)},
+            ) from e
+
+    try:
+        proj = await project_token(symbol, timeframe=timeframe)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    await audit_repo.write(
+        user_id=(user.id if user else None),
+        actor=("user" if user else "system"),
+        action="projection.generate",
+        target=symbol,
+        args={"timeframe": timeframe},
+        result={
+            "provider": proj.provider, "model": proj.model,
+            "stance": (proj.structured or {}).get("stance"),
+            "quality_flags": (proj.structured or {}).get("quality_flags", []),
+        },
+    )
+    return proj.as_response()
 
 
 def _snapshot_dict(snap) -> dict:

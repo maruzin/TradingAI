@@ -92,6 +92,30 @@ async def fire_alert(
     return row["id"] if row else None
 
 
+async def recent_payload_match(
+    *, user_id: str, kind: str, token_symbol: str,
+    trigger_kind: str, window_hours: int = 12,
+) -> bool:
+    """Has this exact (kind, token, trigger) already fired in the last N hours?
+
+    Used by the setup watcher to dedup recurring alerts on the same setup.
+    """
+    row = await db.fetchrow(
+        """
+        select 1
+          from alerts
+         where user_id = $1::uuid
+           and fired_at > now() - ($5 * interval '1 hour')
+           and (payload->>'kind') = $2
+           and (payload->>'token_symbol') = $3
+           and (payload->>'trigger_kind') = $4
+         limit 1
+        """,
+        user_id, kind, token_symbol, trigger_kind, window_hours,
+    )
+    return row is not None
+
+
 async def list_for_user(user_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
     rows = await db.fetch(
         """
