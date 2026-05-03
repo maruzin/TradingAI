@@ -6,13 +6,29 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { api, type Watchlist } from "@/lib/api";
 import { Plus, Trash2 } from "lucide-react";
 
-const FALLBACK = ["bitcoin", "ethereum", "solana", "binancecoin", "ripple", "cardano", "avalanche-2", "chainlink"];
+const FALLBACK_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "LINK"];
 
 export default function Home() {
   const wl = useQuery({ queryKey: ["watchlists"], queryFn: () => api.watchlists().then((d) => d.watchlists), retry: false });
   const isAuthed = !wl.isError;
 
+  // ONE batch call for the demo watchlist instead of 8 parallel snapshot calls.
+  // Demo dashboard works without auth; we always render top tokens.
+  const markets = useQuery({
+    queryKey: ["markets", 1],
+    queryFn: () => api.markets(1, "market_cap_desc"),
+    refetchInterval: 60_000,
+    enabled: !isAuthed,
+  });
+
   if (!isAuthed) {
+    const coins = (markets.data?.coins ?? []).filter((c) =>
+      FALLBACK_SYMBOLS.includes(c.symbol)
+    );
+    const seen = new Set<string>();
+    const ordered = FALLBACK_SYMBOLS
+      .map((sym) => coins.find((c) => c.symbol === sym && !seen.has(sym) && (seen.add(sym), true)))
+      .filter((c): c is NonNullable<typeof c> => Boolean(c));
     return (
       <div className="space-y-6">
         <section>
@@ -23,8 +39,30 @@ export default function Home() {
             to save your own.
           </p>
         </section>
+        {markets.isLoading && (
+          <div className="card text-sm text-ink-muted">loading top markets…</div>
+        )}
+        {markets.error && (
+          <div className="card text-sm text-bear">
+            <b>Backend unreachable.</b> {String(markets.error.message).slice(0, 200)}
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {FALLBACK.map((s) => <TokenCard key={s} symbol={s} />)}
+          {ordered.map((c) => (
+            <TokenCard
+              key={c.id}
+              symbol={c.id}
+              preloaded={{
+                symbol: c.symbol,
+                name: c.name,
+                price_usd: c.price_usd,
+                market_cap_usd: c.market_cap_usd,
+                volume_24h_usd: c.volume_24h_usd,
+                pct_change_24h: c.pct_24h,
+                market_cap_rank: c.market_cap_rank,
+              }}
+            />
+          ))}
         </div>
         <Disclaimer />
       </div>

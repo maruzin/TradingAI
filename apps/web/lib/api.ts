@@ -239,6 +239,21 @@ export type Thesis = {
 export const api = {
   // tokens
   snapshot: (symbol: string) => jsonFetch<TokenSnapshot>(`/tokens/${encodeURIComponent(symbol)}/snapshot`),
+  markets: (page = 1, sort: "market_cap_desc" | "volume_desc" | "gain_desc" | "loss_desc" = "market_cap_desc") =>
+    jsonFetch<{
+      page: number;
+      coins: Array<{
+        id: string; symbol: string; name: string; image: string;
+        market_cap_rank: number | null;
+        price_usd: number | null;
+        market_cap_usd: number | null;
+        fdv_usd: number | null;
+        volume_24h_usd: number | null;
+        pct_24h: number | null;
+        pct_7d: number | null;
+        pct_30d: number | null;
+      }>;
+    }>(`/markets?page=${page}&sort=${sort}`),
   brief: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>
     jsonFetch<TokenBrief>(`/tokens/${encodeURIComponent(symbol)}/brief?horizon=${horizon}`),
 
