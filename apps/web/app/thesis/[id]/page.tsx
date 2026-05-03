@@ -1,9 +1,11 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { use } from "react";
+import { useParams } from "next/navigation";
 import clsx from "clsx";
 import { api } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
+
+export const dynamic = "force-dynamic";
 
 const OVERALL_COLOR: Record<string, string> = {
   healthy: "text-bull",
@@ -19,8 +21,9 @@ const STATUS_DOT: Record<string, string> = {
   unobservable: "text-ink-soft",
 };
 
-export default function ThesisDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ThesisDetail() {
+  const routeParams = useParams<{ id: string }>();
+  const id = routeParams?.id ?? "";
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["thesis", id], queryFn: () => api.thesis(id), retry: false });
   const evaluate = useMutation({

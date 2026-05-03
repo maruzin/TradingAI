@@ -352,6 +352,15 @@ export const api = {
         long_count: number;
         short_count: number;
         verdict: "long_bias" | "short_bias" | "mixed" | "no_setup";
+        buy_pct?: number;
+        sell_pct?: number;
+        suggested_holding_days_min?: number;
+        suggested_holding_days_max?: number;
+        suggested_entry?: number;
+        suggested_stop?: number;
+        suggested_target?: number;
+        risk_reward?: number;
+        atr_pct?: number;
         error?: string;
       }>;
     }>(`/signals${qs.toString() ? `?${qs}` : ""}`);

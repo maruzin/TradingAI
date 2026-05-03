@@ -93,6 +93,36 @@ async def get_signals(
             else:
                 verdict = "mixed"
 
+            # Buy/sell probability split — relative count of triggered strategies.
+            total_triggers = longs + shorts
+            buy_pct = round(100 * longs / total_triggers, 1) if total_triggers else 50.0
+            sell_pct = round(100 * shorts / total_triggers, 1) if total_triggers else 50.0
+
+            # Suggested holding window per timeframe — anchored to typical
+            # follow-through windows for these signals (not scalp-tier).
+            holding_days = {
+                "1h": (1, 5),     # short-term swing
+                "4h": (3, 14),    # swing
+                "1d": (7, 30),    # position
+            }.get(timeframe, (7, 30))
+
+            # Net of long-side triggers — first one with explicit stop/target,
+            # else compute from indicator ATR. Daily-picks scoring already does
+            # this; mirror here so /signals rows have actionable levels too.
+            entry_price = snap.last_price
+            atr = snap.volatility.atr_14 or (entry_price * 0.02)
+            if verdict == "long_bias":
+                stop_loss = entry_price - 2 * atr
+                take_profit = entry_price + 4 * atr
+                rr = 2.0
+            elif verdict == "short_bias":
+                stop_loss = entry_price + 2 * atr
+                take_profit = entry_price - 4 * atr
+                rr = 2.0
+            else:
+                stop_loss = take_profit = None
+                rr = None
+
             rows.append({
                 "symbol": pair,
                 "last_price": snap.last_price,
@@ -128,6 +158,16 @@ async def get_signals(
                 "long_count": longs,
                 "short_count": shorts,
                 "verdict": verdict,
+                # New fields the user asked for —
+                "buy_pct": buy_pct,
+                "sell_pct": sell_pct,
+                "suggested_holding_days_min": holding_days[0],
+                "suggested_holding_days_max": holding_days[1],
+                "suggested_entry": round(entry_price, 8) if entry_price else None,
+                "suggested_stop": round(stop_loss, 8) if stop_loss else None,
+                "suggested_target": round(take_profit, 8) if take_profit else None,
+                "risk_reward": rr,
+                "atr_pct": round((atr / entry_price * 100), 2) if entry_price else None,
             })
 
     try:

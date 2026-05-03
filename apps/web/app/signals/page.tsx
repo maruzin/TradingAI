@@ -5,7 +5,26 @@ import { useState } from "react";
 import clsx from "clsx";
 import { api } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
+import { Markdown } from "@/components/Markdown";
 import { fmtUsd } from "@/lib/format";
+
+function BuySellBar({ buy, sell }: { buy: number; sell: number }) {
+  const total = buy + sell;
+  const buyPct = total > 0 ? (buy / total) * 100 : 50;
+  const sellPct = total > 0 ? (sell / total) * 100 : 50;
+  return (
+    <div className="space-y-0.5">
+      <div className="flex h-1.5 w-full overflow-hidden rounded bg-bg-subtle">
+        <div className="h-full bg-bull" style={{ width: `${buyPct}%` }} />
+        <div className="h-full bg-bear" style={{ width: `${sellPct}%` }} />
+      </div>
+      <div className="flex justify-between text-[10px] tabular-nums">
+        <span className="text-bull">{buy.toFixed(0)}%</span>
+        <span className="text-bear">{sell.toFixed(0)}%</span>
+      </div>
+    </div>
+  );
+}
 
 const VERDICT_COLOR: Record<string, string> = {
   long_bias: "text-bull border-bull/40",
@@ -80,10 +99,12 @@ export default function SignalsPage() {
                 <tr className="text-left text-ink-muted border-b border-line">
                   <th className="py-2 pr-3">Symbol</th>
                   <th className="pr-3">Verdict</th>
+                  <th className="pr-3">Buy / Sell</th>
+                  <th className="pr-3">Hold</th>
                   <th className="pr-3">Price</th>
-                  <th className="pr-3">Regime</th>
+                  <th className="pr-3">Entry / Stop / Target</th>
+                  <th className="pr-3">RR</th>
                   <th className="pr-3">RSI</th>
-                  <th className="pr-3">SMA50/200</th>
                   <th className="pr-3">Triggers</th>
                   <th className="pr-3">Patterns</th>
                 </tr>
@@ -95,6 +116,7 @@ export default function SignalsPage() {
                       <Link
                         href={`/token/${r.symbol.split("/")[0].toLowerCase()}`}
                         className="font-medium hover:text-accent"
+                        title="Open full chart + 5-dim brief"
                       >
                         {r.symbol}
                       </Link>
@@ -104,23 +126,34 @@ export default function SignalsPage() {
                         {VERDICT_LABEL[r.verdict]}
                       </span>
                     </td>
-                    <td className="pr-3">{r.last_price ? fmtUsd(r.last_price) : "—"}</td>
-                    <td className="pr-3 text-ink-muted">{r.regime ?? "—"}</td>
-                    <td className="pr-3">
-                      {r.rsi_14 != null ? r.rsi_14.toFixed(1) : "—"}
+                    <td className="pr-3 min-w-[100px]">
+                      <BuySellBar buy={r.buy_pct ?? 50} sell={r.sell_pct ?? 50} />
                     </td>
+                    <td className="pr-3 text-xs text-ink-muted whitespace-nowrap">
+                      {r.suggested_holding_days_min != null
+                        ? `${r.suggested_holding_days_min}–${r.suggested_holding_days_max}d`
+                        : "—"}
+                    </td>
+                    <td className="pr-3">{r.last_price ? fmtUsd(r.last_price) : "—"}</td>
                     <td className="pr-3 text-xs">
-                      {r.above_sma_50 == null ? "—" : (
-                        <>
-                          <span className={r.above_sma_50 ? "text-bull" : "text-bear"}>
-                            {r.above_sma_50 ? "↑50" : "↓50"}
-                          </span>
-                          {" / "}
-                          <span className={r.above_sma_200 ? "text-bull" : "text-bear"}>
-                            {r.above_sma_200 ? "↑200" : "↓200"}
-                          </span>
-                        </>
-                      )}
+                      {r.suggested_entry && r.suggested_stop && r.suggested_target ? (
+                        <div className="space-y-0.5">
+                          <div>E: <span className="text-ink">{fmtUsd(r.suggested_entry)}</span></div>
+                          <div>S: <span className="text-bear">{fmtUsd(r.suggested_stop)}</span></div>
+                          <div>T: <span className="text-bull">{fmtUsd(r.suggested_target)}</span></div>
+                        </div>
+                      ) : <span className="text-ink-soft">—</span>}
+                    </td>
+                    <td className="pr-3">
+                      {r.risk_reward != null ? `${r.risk_reward}x` : "—"}
+                    </td>
+                    <td className="pr-3">
+                      {r.rsi_14 != null ? (
+                        <span className={
+                          r.rsi_14 > 70 ? "text-bear" :
+                          r.rsi_14 < 30 ? "text-bull" : "text-ink"
+                        }>{r.rsi_14.toFixed(1)}</span>
+                      ) : "—"}
                     </td>
                     <td className="pr-3 text-xs">
                       {r.triggers.length === 0 ? (
@@ -131,9 +164,7 @@ export default function SignalsPage() {
                             key={i}
                             className={clsx(
                               "inline-block rounded px-1.5 py-0.5 mr-1",
-                              t.kind === "enter_long"
-                                ? "bg-bull/15 text-bull"
-                                : "bg-bear/15 text-bear",
+                              t.kind === "enter_long" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear",
                             )}
                             title={`${t.strategy} (${(t.confidence * 100).toFixed(0)}%)`}
                           >

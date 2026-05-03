@@ -1,9 +1,5 @@
-# Fly.io app config for TradingAI backend.
-# Replace `app = "tradingai-api"` with your actual app name after `fly launch --no-deploy`.
-# Three process groups: HTTP API, Telegram long-poll bot, Arq cron worker.
-
 app = "tradingai-api"
-primary_region = "lhr"  # change to nearest: ams, fra, ord, etc.
+primary_region = "lhr"
 
 [build]
   dockerfile = "Dockerfile"
@@ -12,41 +8,36 @@ primary_region = "lhr"  # change to nearest: ams, fra, ord, etc.
   PORT = "8080"
   ENVIRONMENT = "production"
 
+# Two process groups: HTTP API and the Arq cron worker.
+# Each runs on its own Fly machine (~$2/mo each for 256MB shared).
 [processes]
-  app    = "uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers"
-  bot    = "uv run python -m app.notifications.telegram"
+  app    = "uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips '*'"
   worker = "uv run arq app.workers.arq_main.WorkerSettings"
 
-[[services]]
-  processes = ["app"]
-  protocol = "tcp"
+[http_service]
   internal_port = 8080
   force_https = true
   auto_stop_machines = "off"
   auto_start_machines = true
   min_machines_running = 1
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
-    force_https = true
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls", "http"]
-
-  [services.concurrency]
-    type = "requests"
-    soft_limit = 50
-    hard_limit = 100
-
-  [[services.http_checks]]
+  processes = ["app"]
+  [[http_service.checks]]
+    grace_period = "10s"
     interval = "30s"
+    method = "GET"
     timeout = "5s"
     path = "/healthz"
-    method = "GET"
 
+# HTTP machine (the API)
 [[vm]]
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+  processes = ["app"]
+
+# Worker machine (Arq cron). Smaller is fine — workers don't serve HTTP.
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["worker"]

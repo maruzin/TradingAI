@@ -186,7 +186,17 @@ function Inbox() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
   });
   if (q.isLoading) return <div className="card text-sm text-ink-muted">loading…</div>;
-  if (q.error) return <div className="card text-sm text-ink-muted">Sign in to see your alerts inbox.</div>;
+  if (q.error) {
+    const msg = String(q.error.message);
+    const is401 = msg.includes("401");
+    return (
+      <div className="card text-sm text-ink-muted">
+        {is401
+          ? "Sign in to see your alerts inbox."
+          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
+      </div>
+    );
+  }
   const alerts = q.data ?? [];
   return (
     <section className="card">

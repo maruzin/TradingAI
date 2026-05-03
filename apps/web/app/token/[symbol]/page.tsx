@@ -1,12 +1,16 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { use, useState, useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
 import { TradingViewWidget } from "@/components/TradingViewWidget";
 import clsx from "clsx";
+
+// This page is session/dynamic — never statically generate it.
+export const dynamic = "force-dynamic";
 
 const STANCE_CHIP: Record<string, string> = {
   bull: "chip chip-bull",
@@ -24,16 +28,11 @@ const STAGES = [
   "Parsing the response and citing sources…",
 ];
 
-export default function TokenPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ symbol: string }>;
-  searchParams?: Promise<{ horizon?: "swing" | "position" | "long" }>;
-}) {
-  const { symbol } = use(params);
-  const sp = searchParams ? use(searchParams) : undefined;
-  const horizon = sp?.horizon ?? "position";
+export default function TokenPage() {
+  const routeParams = useParams<{ symbol: string }>();
+  const sp = useSearchParams();
+  const symbol = routeParams?.symbol ?? "bitcoin";
+  const horizon = (sp?.get("horizon") as "swing" | "position" | "long" | null) ?? "position";
 
   // Snapshot loads instantly — no LLM. Renders price + chart immediately.
   const snap = useQuery({
