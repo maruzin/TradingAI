@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { MobileNav } from "@/components/MobileNav";
 import { TopLoader } from "@/components/TopLoader";
 import { HealthIndicator } from "@/components/HealthIndicator";
+import { RegimeBadge } from "@/components/RegimeBadge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -60,11 +61,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <Link href="/picks" className="hover:text-ink transition-colors">Picks</Link>
                   <Link href="/signals" className="hover:text-ink transition-colors">Signals</Link>
                   <Link href="/gossip" className="hover:text-ink transition-colors">Gossip</Link>
+                  <Link href="/wallets" className="hover:text-ink transition-colors">Wallets</Link>
                   <Link href="/backtest" className="hover:text-ink transition-colors">Backtest</Link>
                   <Link href="/alerts" className="hover:text-ink transition-colors">Alerts</Link>
                   <Link href="/thesis" className="hover:text-ink transition-colors">Theses</Link>
                 </nav>
                 <div className="flex items-center gap-3">
+                  <RegimeBadge />
                   <HealthIndicator />
                   <UserMenu />
                 </div>

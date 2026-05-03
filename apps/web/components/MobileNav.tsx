@@ -2,14 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { LayoutGrid, Sparkles, Activity, Newspaper, BarChart3, Bell, FileText } from "lucide-react";
+import { LayoutGrid, Sparkles, Activity, Newspaper, Wallet, BarChart3, Bell, FileText } from "lucide-react";
 
 const ITEMS = [
   { href: "/",         label: "Home",     Icon: LayoutGrid },
   { href: "/picks",    label: "Picks",    Icon: Sparkles },
   { href: "/signals",  label: "Signals",  Icon: Activity },
+  { href: "/wallets",  label: "Wallets",  Icon: Wallet },
   { href: "/gossip",   label: "Gossip",   Icon: Newspaper },
-  { href: "/backtest", label: "Backtest", Icon: BarChart3 },
 ];
 
 /**

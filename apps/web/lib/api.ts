@@ -203,7 +203,7 @@ export type DailyPicksRunSummary = {
 export type GossipEvent = {
   id: string;
   ts: string;
-  kind: "news" | "social" | "onchain" | "macro" | "influencer";
+  kind: "news" | "social" | "onchain" | "macro" | "influencer" | "whale" | "event";
   source: string;
   title: string;
   url: string;
@@ -234,6 +234,77 @@ export type Thesis = {
     per_invalidation: Array<{ text: string; triggered: boolean; current_reading?: string }>;
     notes?: string;
   };
+};
+
+export type WalletRow = {
+  id: string;
+  user_id: string | null;
+  chain: string;
+  address: string;
+  label: string;
+  category: string | null;
+  weight: number;
+  enabled: boolean;
+  notes: string | null;
+  created_at: string;
+  last_polled_at: string | null;
+};
+
+export type WalletEvent = {
+  id: string;
+  wallet_id: string;
+  chain: string;
+  address: string;
+  tx_hash: string;
+  block_number: number | null;
+  ts: string;
+  direction: "in" | "out" | "contract";
+  token_symbol: string | null;
+  amount: number | null;
+  amount_usd: number | null;
+  counterparty: string | null;
+  counterparty_label: string | null;
+  wallet_label: string;
+  wallet_category: string | null;
+  wallet_weight: number;
+};
+
+export type RegimeSnapshot = {
+  btc_phase: string | null;
+  btc_phase_confidence: number | null;
+  btc_dominance_state: string | null;
+  btc_dominance_pct: number | null;
+  eth_btc_state: string | null;
+  eth_btc_ratio: number | null;
+  dxy_state: string | null;
+  dxy_value: number | null;
+  liquidity_state: string | null;
+  funding_state: string | null;
+  funding_btc_pct: number | null;
+  fear_greed: number | null;
+  fear_greed_label: string | null;
+  summary: string;
+};
+
+export type TokenProjection = {
+  token_symbol: string;
+  as_of_utc: string;
+  markdown: string;
+  structured: Record<string, unknown> & {
+    stance?: string;
+    confidence?: number;
+    scenarios?: Array<{
+      label: string;
+      trigger: string;
+      target: number | null;
+      invalidation: string;
+    }>;
+    watch_24h?: string;
+    quality_flags?: string[];
+  };
+  provider: string;
+  model: string;
+  prompt_id: string;
 };
 
 export const api = {
@@ -332,6 +403,42 @@ export const api = {
     if (params?.since) qs.set("since", params.since);
     return jsonFetch<{ events: GossipEvent[]; as_of: string }>(`/gossip${qs.toString() ? `?${qs}` : ""}`);
   },
+
+  // wallets
+  wallets: (params?: { q?: string; chain?: string; include_global?: boolean; enabled_only?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.chain) qs.set("chain", params.chain);
+    if (params?.include_global != null) qs.set("include_global", String(params.include_global));
+    if (params?.enabled_only) qs.set("enabled_only", "true");
+    return jsonFetch<{ wallets: WalletRow[] }>(`/wallets${qs.toString() ? `?${qs}` : ""}`);
+  },
+  walletAdd: (body: {
+    chain: string; address: string; label: string;
+    category?: string; weight?: number; notes?: string;
+  }) => jsonFetch<{ id: string }>("/wallets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }),
+  walletDelete: (id: string) => jsonFetch<{ ok: boolean }>(`/wallets/${id}`, { method: "DELETE" }),
+  walletEvents: (params?: {
+    wallet_id?: string; min_usd?: number;
+    direction?: "in" | "out" | "contract"; since_hours?: number; limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.wallet_id) qs.set("wallet_id", params.wallet_id);
+    if (params?.min_usd != null) qs.set("min_usd", String(params.min_usd));
+    if (params?.direction) qs.set("direction", params.direction);
+    if (params?.since_hours) qs.set("since_hours", String(params.since_hours));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return jsonFetch<{ events: WalletEvent[] }>(`/wallets/events${qs.toString() ? `?${qs}` : ""}`);
+  },
+
+  // regime + projection
+  regime: () => jsonFetch<RegimeSnapshot>("/regime/snapshot"),
+  projection: (symbol: string, timeframe: "1h" | "4h" | "1d" = "1d") =>
+    jsonFetch<TokenProjection>(`/tokens/${encodeURIComponent(symbol)}/projection?timeframe=${timeframe}`),
 
   // signals
   signals: (params?: { symbols?: string[]; timeframe?: "1h" | "4h" | "1d"; years?: number }) => {

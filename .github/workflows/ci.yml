@@ -48,7 +48,7 @@ jobs:
         run: python eval/hallucination_harness.py --strict
 
   frontend:
-    name: Frontend (lint + typecheck + build)
+    name: Frontend (lint + typecheck + test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,27 +56,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
 
-      - name: Install
-        run: pnpm install --frozen-lockfile=false
+      - name: Install (npm ci)
+        run: npm ci
 
       - name: Lint
-        run: pnpm lint || true
+        run: npm run lint || true
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: npm run typecheck
+
+      - name: Test (vitest)
+        run: npm test -- --run
 
       - name: Build
-        run: pnpm build
+        run: npm run build
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
 
