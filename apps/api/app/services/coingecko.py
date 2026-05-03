@@ -21,6 +21,7 @@ from tenacity import (
 
 from ..logging_setup import get_logger
 from ..settings import get_settings
+from .circuit_breaker import breaker
 
 log = get_logger("coingecko")
 
@@ -208,10 +209,12 @@ class CoinGeckoClient:
         await _PRICE_CACHE.set(f"px:{cg_id}", block)
         return block
 
+    @breaker("coingecko", failure_threshold=5, cool_down_seconds=60.0)
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         # Retry only transient errors. 4xx (e.g. 404 token-not-found) surfaces
         # immediately; 429 rate-limit is retried via a re-raised TransportError
-        # so the exponential backoff still applies.
+        # so the exponential backoff still applies. The circuit breaker opens
+        # after 5 consecutive failures and cools down for 60s.
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential_jitter(initial=0.5, max=4),

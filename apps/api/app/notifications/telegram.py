@@ -137,14 +137,27 @@ class TelegramBotApp:
 
     async def run(self) -> None:
         log.info("telegram.bot.start")
+        # Exponential backoff with cap. Counts CONSECUTIVE failures; resets to
+        # zero on any successful poll. Avoids hammering the API after Telegram
+        # rate-limits us or the network drops out.
+        consecutive_failures = 0
         while True:
             try:
                 updates = await self._poll()
+                consecutive_failures = 0
                 for u in updates:
                     await self._handle_update(u)
             except Exception as e:
-                log.warning("telegram.bot.loop_error", error=str(e))
-                await asyncio.sleep(2)
+                consecutive_failures += 1
+                # 2s, 4s, 8s, 16s, 32s, capped at 60s.
+                delay = min(60.0, 2.0 * (2 ** min(consecutive_failures - 1, 5)))
+                log.warning(
+                    "telegram.bot.loop_error",
+                    error=str(e),
+                    consecutive_failures=consecutive_failures,
+                    backoff_seconds=delay,
+                )
+                await asyncio.sleep(delay)
 
     async def _poll(self) -> list[dict]:
         url = API_BASE.format(token=self.token) + "/getUpdates"

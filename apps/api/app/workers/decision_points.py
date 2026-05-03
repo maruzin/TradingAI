@@ -137,15 +137,17 @@ def main() -> int:
     p.add_argument("--out", default="-", help="JSON path or '-' for stdout")
     args = p.parse_args()
 
+    import sys as _sys
     tokens = [t.strip() for t in args.tokens.split(",") if t.strip()]
     points = asyncio.run(harvest(tokens, timeframe=args.timeframe, years=args.years))
     payload = json.dumps(points, indent=2, default=str)
     if args.out == "-":
-        print(payload)
+        _sys.stdout.write(payload + "\n")
     else:
         from pathlib import Path
         Path(args.out).write_text(payload, encoding="utf-8")
-        print(f"Wrote {len(points)} points to {args.out}")
+        # Status message goes to stderr so stdout stays a clean data channel.
+        _sys.stderr.write(f"Wrote {len(points)} points to {args.out}\n")
     return 0
 
 

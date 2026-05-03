@@ -7,17 +7,28 @@ Sprint 0: no auth, no DB persistence. Sprint 2 wires Supabase RLS + caches brief
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..agents.analyst import AnalystAgent
+from ..auth import CurrentUser
+from ..deps import get_optional_user
 from ..logging_setup import get_logger
 from ..repositories import ai_calls as calls_repo
+from ..repositories import audit as audit_repo
 from ..repositories import briefs as brief_repo
 from ..repositories import rag as rag_repo
 from ..services.coingecko import CoinGeckoClient
+from ..services.rate_limit import RateLimitExceeded, enforce as enforce_rate_limit
 
 router = APIRouter()
 log = get_logger("routes.tokens")
+
+# Per-user budget for fresh briefs. Cached briefs (within 6h) don't count.
+# 20/day for normal users, unlimited for admins.
+BRIEF_LIMIT_PER_DAY = 20
+BRIEF_WINDOW_SECONDS = 86_400
 
 
 @router.get("/{symbol}/snapshot")
@@ -36,6 +47,7 @@ async def get_snapshot(symbol: str) -> dict:
 @router.get("/{symbol}/brief")
 async def get_brief(
     symbol: str,
+    user: Annotated[CurrentUser | None, Depends(get_optional_user)] = None,
     horizon: str = Query("position", pattern="^(swing|position|long)$"),
     fresh: bool = Query(False, description="Bypass cache and regenerate"),
 ) -> dict:
@@ -45,6 +57,9 @@ async def get_brief(
     ``fresh=true`` to force a regenerate (used by the UI's refresh button).
     Falls back gracefully when the DB is unreachable — the brief is still
     returned, just not persisted.
+
+    Rate-limited: 20 fresh briefs / 24h per user (cached briefs are free).
+    Admins are exempt.
     """
     if not fresh:
         try:
@@ -54,6 +69,22 @@ async def get_brief(
                 return cached
         except Exception as e:
             log.debug("brief.cache_lookup_failed", error=str(e))
+
+    # Cache miss → spending an LLM call. Enforce the budget.
+    if user is None or not user.is_admin:
+        try:
+            enforce_rate_limit(
+                user_id=(user.id if user else "anon"),
+                action="brief",
+                limit=BRIEF_LIMIT_PER_DAY,
+                window_seconds=BRIEF_WINDOW_SECONDS,
+            )
+        except RateLimitExceeded as e:
+            raise HTTPException(
+                status_code=429,
+                detail=str(e),
+                headers={"Retry-After": str(e.retry_after_seconds)},
+            ) from e
 
     agent = AnalystAgent()
     try:
@@ -90,11 +121,26 @@ async def get_brief(
             brief.snapshot.get("contract_address"),
         )
         await calls_repo.log_brief_call(
-            user_id=None, token_id=token_id,
+            user_id=(user.id if user else None), token_id=token_id,
             stance=stance, horizon=horizon, confidence=confidence,
         )
     except Exception as e:
         log.debug("brief.ai_call_log_failed", error=str(e))
+
+    # Application-level audit trail (DB triggers cover the row insert).
+    await audit_repo.write(
+        user_id=(user.id if user else None),
+        actor=("user" if user else "system"),
+        action="brief.generate",
+        target=symbol,
+        args={"horizon": horizon, "fresh": fresh},
+        result={
+            "provider": brief.provider, "model": brief.model,
+            "prompt_id": brief.prompt_id,
+            "n_sources": len(brief.sources),
+            "quality_flags": (brief.structured or {}).get("quality_flags", []),
+        },
+    )
 
     return brief.as_response()
 
