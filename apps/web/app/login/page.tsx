@@ -1,10 +1,21 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Disclaimer } from "@/components/Disclaimer";
 
+// Login page is session-aware — never statically generate it.
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md py-12 text-sm text-ink-muted">loading…</div>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const sp = useSearchParams();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
