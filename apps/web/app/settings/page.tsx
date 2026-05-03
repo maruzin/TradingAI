@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { usePrefs, REFRESH_TIERS, type RefreshTier } from "@/lib/prefs";
+import { usePrefs, REFRESH_TIERS, type RefreshTier, type Theme } from "@/lib/prefs";
 import { TF_OPTIONS } from "@/components/TradingViewWidget";
 
 export default function SettingsPage() {
@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const setDefaultTf = usePrefs((s) => s.setDefaultTimeframe);
   const reducedMotion = usePrefs((s) => s.reducedMotion);
   const setReducedMotion = usePrefs((s) => s.setReducedMotion);
+  const theme = usePrefs((s) => s.theme);
+  const setTheme = usePrefs((s) => s.setTheme);
 
   return (
     <div className="space-y-6">
@@ -73,6 +75,33 @@ export default function SettingsPage() {
                 }`}
               >
                 {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="card space-y-3">
+        <div>
+          <h2 className="font-medium">Theme</h2>
+          <p className="text-sm text-ink-muted">
+            Dark by default. Switch to light if you trade in sunlight.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {(["dark", "light", "system"] as Theme[]).map((t) => {
+            const active = theme === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setTheme(t)}
+                className={`rounded-md border px-3 py-1.5 text-xs capitalize ${
+                  active
+                    ? "border-accent/50 bg-accent/10 text-accent"
+                    : "border-line text-ink-muted hover:text-ink"
+                }`}
+              >
+                {t}
               </button>
             );
           })}

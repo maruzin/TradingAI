@@ -286,6 +286,24 @@ export type RegimeSnapshot = {
   summary: string;
 };
 
+export type AdminHealth = {
+  version: string;
+  environment: string;
+  llm_provider: string;
+  process_uptime_seconds: number;
+  sentry: boolean;
+  breakers: Record<string, {
+    state: "open" | "half_open" | "closed";
+    consecutive_failures: number;
+    open_until: number | null;
+    failure_threshold: number;
+    cool_down_seconds: number;
+  }>;
+  rate_limit_own: Record<string, { count: number; window_started: number }>;
+  cron_last_runs: Record<string, string | null>;
+  cron_last_errors: Record<string, string>;
+};
+
 export type TokenProjection = {
   token_symbol: string;
   as_of_utc: string;
@@ -439,6 +457,9 @@ export const api = {
   regime: () => jsonFetch<RegimeSnapshot>("/regime/snapshot"),
   projection: (symbol: string, timeframe: "1h" | "4h" | "1d" = "1d") =>
     jsonFetch<TokenProjection>(`/tokens/${encodeURIComponent(symbol)}/projection?timeframe=${timeframe}`),
+
+  // admin
+  adminHealth: () => jsonFetch<AdminHealth>("/admin/health/snapshot"),
 
   // signals
   signals: (params?: { symbols?: string[]; timeframe?: "1h" | "4h" | "1d"; years?: number }) => {

@@ -2,12 +2,32 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
+import nextDynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
-import { TradingViewWidget, TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
+import { TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
 import clsx from "clsx";
+
+// TradingView's embed script is ~50kB and only useful client-side. Lazy-load
+// via next/dynamic so the page's first paint isn't blocked on the chart.
+// (`nextDynamic` rename avoids the clash with the route-segment
+// `export const dynamic = "force-dynamic"` below.)
+const TradingViewWidget = nextDynamic(
+  () => import("@/components/TradingViewWidget").then((m) => m.TradingViewWidget),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="card flex items-center justify-center text-xs text-ink-muted"
+        style={{ minHeight: 360 }}
+      >
+        loading chart…
+      </div>
+    ),
+  },
+);
 
 const TF_LS_KEY = "tradingai:tf";
 const VALID_TF = new Set<TFCode>(TF_OPTIONS.map((o) => o.code));

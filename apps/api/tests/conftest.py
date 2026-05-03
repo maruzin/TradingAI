@@ -13,11 +13,18 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-# Force dev/test mode before any app import.
-os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("LLM_PROVIDER", "anthropic")
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
-os.environ.setdefault("SUPABASE_URL", "")  # ensures auth dev-mode kicks in
+# Force dev/test mode before any app import. We OVERRIDE (not setdefault) so a
+# developer's local .env can't accidentally leak real API keys into the test
+# run — every test must use the stubbed providers below.
+os.environ["ENVIRONMENT"] = "development"
+os.environ["LLM_PROVIDER"] = "anthropic"
+os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+os.environ["SUPABASE_URL"] = ""           # ensures auth dev-mode kicks in
+os.environ["ALLOW_DEV_AUTH"] = "true"     # required by hardened auth.py
+# Settings is lru_cached on first read — clear it so the env above takes effect
+# even if some other module imported settings during test discovery.
+from app import settings as _settings_mod  # noqa: E402
+_settings_mod.get_settings.cache_clear()
 
 from app.main import create_app  # noqa: E402
 
@@ -25,7 +32,10 @@ from app.main import create_app  # noqa: E402
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     app = create_app()
-    with TestClient(app) as c:
+    # raise_server_exceptions=False so a route raising RuntimeError (e.g. the
+    # stubbed DB pool) returns 500 to the test instead of bubbling out and
+    # failing the test with an exception.
+    with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
 
@@ -124,7 +134,15 @@ content (CPI, Fed funds, SPX, oil)
         async def embed(self, texts):  # noqa: ARG002
             return [[0.0] * 8 for _ in texts]
 
-    monkeypatch.setattr(llm, "get_provider", lambda settings=None: StubProvider())
+    stub = StubProvider()
+    monkeypatch.setattr(llm, "get_provider", lambda settings=None: stub)
+    # analyst.py and projection.py import get_provider by name, so the patch
+    # has to land on the consumer modules too.
+    monkeypatch.setattr("app.agents.analyst.get_provider", lambda settings=None: stub)
+    try:
+        monkeypatch.setattr("app.agents.projection.get_provider", lambda settings=None: stub)
+    except (AttributeError, ImportError):
+        pass
 
 
 @pytest.fixture
@@ -188,9 +206,13 @@ def mock_historical(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_fetch(self, spec, page_limit=1000):  # noqa: ARG002
         return historical.FetchResult(spec=spec, rows=0, first_ts=None, last_ts=None,
                                        df=pd.DataFrame(columns=["open","high","low","close","volume"]))
+    async def fake_fetch_with_fallback(self, spec, **kw):  # noqa: ARG002
+        return historical.FetchResult(spec=spec, rows=0, first_ts=None, last_ts=None,
+                                       df=pd.DataFrame(columns=["open","high","low","close","volume"]))
     async def fake_close(self):
         return None
     monkeypatch.setattr(historical.HistoricalClient, "fetch", fake_fetch)
+    monkeypatch.setattr(historical.HistoricalClient, "fetch_with_fallback", fake_fetch_with_fallback)
     monkeypatch.setattr(historical.HistoricalClient, "close", fake_close)
 
 

@@ -12,19 +12,48 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .logging_setup import configure_logging, get_logger
-from .routes import alerts, auth, backtest, gossip, health, markets, picks, regime, signals, system, theses, tokens, track_record, wallets, watchlists
+from .routes import admin_health, alerts, auth, backtest, gossip, health, markets, picks, regime, signals, system, theses, tokens, track_record, wallets, watchlists
 from .settings import get_settings
+
+
+def _init_sentry() -> None:
+    settings = get_settings()
+    if not settings.sentry_dsn or settings.sentry_dsn.strip() in {"", "your-sentry-dsn"}:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.asyncio import AsyncioIntegration
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            release=__version__,
+            traces_sample_rate=0.1 if settings.environment == "production" else 1.0,
+            integrations=[
+                FastApiIntegration(),
+                StarletteIntegration(),
+                AsyncioIntegration(),
+            ],
+            send_default_pii=False,
+        )
+    except ImportError:
+        # sentry-sdk not installed — fine in test envs.
+        pass
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    _init_sentry()
     log = get_logger("startup")
     settings = get_settings()
     log.info(
         "tradingai.api.start",
         env=settings.environment,
         llm_provider=settings.llm_provider,
+        sentry=bool(settings.sentry_dsn),
         version=__version__,
     )
     yield
@@ -65,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(system.router, prefix="/api/system", tags=["system"])
     app.include_router(wallets.router, prefix="/api/wallets", tags=["wallets"])
     app.include_router(regime.router, prefix="/api/regime", tags=["regime"])
+    app.include_router(admin_health.router, prefix="/api/admin/health", tags=["admin"])
 
     return app
 

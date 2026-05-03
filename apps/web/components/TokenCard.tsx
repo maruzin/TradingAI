@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type TokenSnapshot } from "@/lib/api";
 import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
@@ -12,8 +13,12 @@ import clsx from "clsx";
  * If ``preloaded`` is supplied (from a batch /api/markets call on the page),
  * NO per-card fetch happens — that prevents the dashboard from fanning out N
  * parallel CoinGecko requests, which hammered the free tier rate limit.
+ *
+ * Memoized: the dashboard typing in the "add token" input was re-rendering
+ * every card on each keystroke. With 10+ cards that adds up; React.memo cuts
+ * the re-renders to only the cards whose props actually changed.
  */
-export function TokenCard({
+function TokenCardInner({
   symbol,
   preloaded,
 }: {
@@ -98,3 +103,6 @@ export function TokenCard({
     </Link>
   );
 }
+
+export const TokenCard = memo(TokenCardInner);
+TokenCard.displayName = "TokenCard";

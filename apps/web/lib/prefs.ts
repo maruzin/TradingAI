@@ -21,6 +21,8 @@ export const REFRESH_TIERS: Record<
   off: { label: "Off — manual refresh only", pricesMs: 0, gossipMs: 0, alertsMs: 0, signalsMs: 0 },
 };
 
+export type Theme = "dark" | "light" | "system";
+
 interface PrefsState {
   refreshTier: RefreshTier;
   setRefreshTier: (next: RefreshTier) => void;
@@ -32,6 +34,10 @@ interface PrefsState {
   // Reduced motion preference (overrides OS prefers-reduced-motion if set)
   reducedMotion: boolean;
   setReducedMotion: (b: boolean) => void;
+
+  // Theme. "system" follows OS prefers-color-scheme.
+  theme: Theme;
+  setTheme: (t: Theme) => void;
 }
 
 export const usePrefs = create<PrefsState>()(
@@ -43,6 +49,8 @@ export const usePrefs = create<PrefsState>()(
       setDefaultTimeframe: (tf) => set({ defaultTimeframe: tf }),
       reducedMotion: false,
       setReducedMotion: (b) => set({ reducedMotion: b }),
+      theme: "dark",
+      setTheme: (t) => set({ theme: t }),
     }),
     {
       name: "tradingai-prefs",

@@ -9,6 +9,8 @@ import { MobileNav } from "@/components/MobileNav";
 import { TopLoader } from "@/components/TopLoader";
 import { HealthIndicator } from "@/components/HealthIndicator";
 import { RegimeBadge } from "@/components/RegimeBadge";
+import { ThemeApplier } from "@/components/ThemeApplier";
+import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,6 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`dark ${inter.variable} ${mono.variable}`}>
       <body className="font-sans">
         <Providers>
+          <ThemeApplier />
+          <KeyboardShortcuts />
           <Suspense fallback={null}>
             <TopLoader />
           </Suspense>

@@ -32,6 +32,7 @@ dependencies = [
     "scipy>=1.14.0",            # peak-finding for chart patterns
     "matplotlib>=3.9.0",        # backtest report visuals
     "jinja2>=3.1.4",            # HTML report templating
+    "sentry-sdk[fastapi]>=2.18.0",  # error reporting
 ]
 
 [project.optional-dependencies]
