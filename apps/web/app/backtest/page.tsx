@@ -135,7 +135,7 @@ function BacktestResults({ data }: { data: BacktestRun }) {
               </tr>
             </thead>
             <tbody>
-              {data.results.map((r) => {
+              {(data.results ?? []).map((r) => {
                 const m = r.metrics as Record<string, number>;
                 const totalCls = m.total_return_pct >= (m.buy_hold_return_pct || 0) ? "text-bull" : "text-bear";
                 return (
@@ -156,7 +156,7 @@ function BacktestResults({ data }: { data: BacktestRun }) {
         </div>
       </section>
 
-      {data.results.map((r) => (
+      {(data.results ?? []).map((r) => (
         <details key={r.symbol} className="card">
           <summary className="cursor-pointer font-medium">{r.symbol} — full report</summary>
           <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-6 text-ink-muted">{r.report_markdown}</pre>

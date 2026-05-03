@@ -116,9 +116,9 @@ export default function GossipPage() {
         </div>
       )}
 
-      {q.data && q.data.events.length > 0 && (
+      {q.data && (q.data.events ?? []).length > 0 && (
         <ul className="space-y-2">
-          {q.data.events.map((e: GossipEvent) => <EventRow key={e.id} e={e} />)}
+          {(q.data.events ?? []).map((e: GossipEvent) => <EventRow key={e.id} e={e} />)}
         </ul>
       )}
 
@@ -155,15 +155,15 @@ function EventRow({ e }: { e: GossipEvent }) {
       {e.summary && (
         <p className="text-xs text-ink-muted leading-relaxed">{e.summary}</p>
       )}
-      {(e.token_symbols.length > 0 || e.tags.length > 0) && (
+      {((e.token_symbols ?? []).length > 0 || (e.tags ?? []).length > 0) && (
         <div className="flex flex-wrap gap-1 text-[10px]">
-          {e.token_symbols.map((s) => (
+          {(e.token_symbols ?? []).map((s) => (
             <a key={s} href={`/token/${s.toLowerCase()}`}
               className="rounded bg-accent/10 text-accent px-1.5 py-0.5 hover:bg-accent/20">
               ${s}
             </a>
           ))}
-          {e.tags.map((t) => (
+          {(e.tags ?? []).map((t) => (
             <span key={t} className="rounded bg-bg-subtle text-ink-soft px-1.5 py-0.5">
               #{t}
             </span>

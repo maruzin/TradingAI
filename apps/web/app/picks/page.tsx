@@ -68,7 +68,7 @@ export default function PicksPage() {
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2">
-            {q.data.picks.map((p) => <PickCard key={p.rank} p={p} />)}
+            {(q.data.picks ?? []).map((p) => <PickCard key={p.rank} p={p} />)}
           </section>
         </>
       )}
@@ -80,7 +80,8 @@ export default function PicksPage() {
 
 function PickCard({ p }: { p: DailyPick }) {
   const symbolPath = p.symbol.toLowerCase();
-  const componentsArray = Object.entries(p.components).slice(0, 6);
+  const componentsArray = Object.entries(p.components ?? {}).slice(0, 6);
+  const rationale = Array.isArray(p.rationale) ? p.rationale : [];
 
   return (
     <Link
@@ -129,9 +130,9 @@ function PickCard({ p }: { p: DailyPick }) {
         ))}
       </div>
 
-      {p.rationale.length > 0 && (
+      {rationale.length > 0 && (
         <ul className="text-xs text-ink-muted list-disc pl-4">
-          {p.rationale.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
+          {rationale.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
         </ul>
       )}
 

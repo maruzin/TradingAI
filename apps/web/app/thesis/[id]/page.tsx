@@ -63,7 +63,7 @@ export default function ThesisDetail() {
       <section className="card">
         <h2 className="font-medium mb-2">Key assumptions</h2>
         <ul className="space-y-1">
-          {t.key_assumptions.map((a, i) => {
+          {(t.key_assumptions ?? []).map((a, i) => {
             const found = ev?.per_assumption?.find((p) => p.text === a);
             return (
               <li key={i} className="text-sm flex items-start gap-2">
@@ -83,7 +83,7 @@ export default function ThesisDetail() {
       <section className="card">
         <h2 className="font-medium mb-2">Invalidation criteria</h2>
         <ul className="space-y-1">
-          {t.invalidation.map((iv, i) => {
+          {(t.invalidation ?? []).map((iv, i) => {
             const found = ev?.per_invalidation?.find((p) => p.text === iv);
             const triggered = found?.triggered;
             return (

@@ -54,7 +54,7 @@ function ThesisRow({ t }: { t: Thesis }) {
       <div>
         <div className="text-sm font-medium">{t.token_symbol.toUpperCase()} · {t.stance} · {t.horizon}</div>
         <div className="text-xs text-ink-muted line-clamp-2">{t.core_thesis}</div>
-        <div className="text-xs text-ink-soft mt-1">{t.key_assumptions.length} assumptions · {t.invalidation.length} invalidations</div>
+        <div className="text-xs text-ink-soft mt-1">{(t.key_assumptions ?? []).length} assumptions · {(t.invalidation ?? []).length} invalidations</div>
       </div>
       <span className={clsx("chip", STATUS_COLOR[t.status])}>{t.status}</span>
     </Link>
