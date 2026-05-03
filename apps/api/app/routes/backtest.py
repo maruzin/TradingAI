@@ -69,7 +69,7 @@ async def run_backtest(req: BacktestRequest) -> dict:
         async def _one(sym: str) -> None:
             async with sem:
                 try:
-                    fr = await client.fetch(FetchSpec(
+                    fr = await client.fetch_with_fallback(FetchSpec(
                         symbol=sym, exchange=req.exchange,
                         timeframe=req.timeframe,
                         since_utc=since, until_utc=until,

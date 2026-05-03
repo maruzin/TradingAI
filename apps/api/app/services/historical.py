@@ -27,10 +27,29 @@ from ..logging_setup import get_logger
 log = get_logger("historical")
 
 Timeframe = Literal["1h", "4h", "1d"]
-Exchange = Literal["binance", "kraken", "coinbase"]
+Exchange = Literal["binance", "kraken", "coinbase", "bybit", "kucoin", "okx", "bitstamp"]
 
 # Timeframe → minutes per bar (used for math, page-sizing)
 TF_MIN: dict[Timeframe, int] = {"1h": 60, "4h": 240, "1d": 1440}
+
+# Order tried by `fetch_with_fallback`. Many cloud regions (incl. Fly US-East)
+# can no longer reach Binance directly, so it can't be the only option.
+FALLBACK_CHAIN: tuple[Exchange, ...] = (
+    "binance", "bybit", "kucoin", "okx", "kraken", "coinbase", "bitstamp",
+)
+
+# Per-exchange quote-asset mapping. CCXT pair names differ across venues —
+# Binance uses USDT, Kraken/Coinbase use USD for spot. We retry with the
+# native quote when the original pair returns nothing.
+NATIVE_QUOTE: dict[Exchange, tuple[str, ...]] = {
+    "binance": ("USDT", "USD"),
+    "bybit": ("USDT", "USD"),
+    "kucoin": ("USDT", "USD"),
+    "okx": ("USDT", "USD"),
+    "kraken": ("USD", "USDT"),
+    "coinbase": ("USD", "USDT"),
+    "bitstamp": ("USD",),
+}
 
 
 @dataclass
@@ -131,10 +150,73 @@ class HistoricalClient:
         self._exchanges[name] = ex
         return ex
 
+    async def fetch_with_fallback(
+        self,
+        spec: FetchSpec,
+        *,
+        chain: tuple[Exchange, ...] = FALLBACK_CHAIN,
+        page_limit: int = 1000,
+    ) -> FetchResult:
+        """Try `spec.exchange` first, then walk `chain` until one returns rows.
+
+        Also retries each exchange with the native quote asset if the original
+        symbol returns nothing — Binance's BTC/USDT becomes BTC/USD on Kraken.
+        Returns the first non-empty result, or an empty `FetchResult` if every
+        exchange in the chain failed.
+        """
+        # Try the requested exchange first (no-op if it's already first in chain).
+        order: list[Exchange] = [spec.exchange] + [e for e in chain if e != spec.exchange]
+        last_err: Exception | None = None
+        for ex_name in order:
+            for symbol in _candidate_symbols(spec.symbol, ex_name):
+                attempt_spec = FetchSpec(
+                    symbol=symbol, exchange=ex_name, timeframe=spec.timeframe,
+                    since_utc=spec.since_utc, until_utc=spec.until_utc,
+                )
+                try:
+                    result = await self.fetch(attempt_spec, page_limit=page_limit)
+                except Exception as e:
+                    last_err = e
+                    log.warning("historical.fallback_attempt_failed",
+                                exchange=ex_name, symbol=symbol, error=str(e))
+                    continue
+                if result.rows > 0:
+                    if ex_name != spec.exchange or symbol != spec.symbol:
+                        log.info("historical.fallback_used",
+                                 wanted=(spec.exchange, spec.symbol),
+                                 got=(ex_name, symbol), rows=result.rows)
+                    return result
+        log.warning("historical.all_fallbacks_empty",
+                    symbol=spec.symbol, timeframe=spec.timeframe,
+                    last_error=str(last_err) if last_err else None)
+        return FetchResult(spec=spec, rows=0, first_ts=None, last_ts=None,
+                           df=pd.DataFrame())
+
 
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+def _candidate_symbols(symbol: str, exchange: Exchange) -> list[str]:
+    """Yield symbol variants to try for a given exchange.
+
+    e.g. on Kraken, "BTC/USDT" → ["BTC/USDT", "BTC/USD"]; first hit wins.
+    """
+    if "/" not in symbol:
+        return [symbol]
+    base, quote = symbol.split("/", 1)
+    quotes = list(NATIVE_QUOTE.get(exchange, (quote,)))
+    if quote not in quotes:
+        quotes.insert(0, quote)
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in quotes:
+        s = f"{base}/{q}"
+        if s not in seen:
+            out.append(s)
+            seen.add(s)
+    return out
+
+
 def _to_df(rows: Iterable[list[float]]) -> pd.DataFrame:
     df = pd.DataFrame(list(rows), columns=["ts", "open", "high", "low", "close", "volume"])
     if df.empty:

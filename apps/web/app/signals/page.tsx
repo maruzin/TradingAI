@@ -91,9 +91,16 @@ export default function SignalsPage() {
         </div>
       )}
 
-      {q.data && (
+      {q.data && (q.data.rows ?? []).length === 0 && !q.isLoading && (
+        <div className="card text-sm text-ink-muted">
+          No setups detected at the {tf} timeframe. Try another timeframe or rescan.
+        </div>
+      )}
+
+      {q.data && (q.data.rows ?? []).length > 0 && (
         <>
-          <section className="card overflow-x-auto">
+          {/* Mobile: stacked cards. Desktop: data table. */}
+          <section className="card overflow-x-auto hidden md:block">
             <table className="w-full text-sm tabular-nums">
               <thead>
                 <tr className="text-left text-ink-muted border-b border-line">
@@ -110,7 +117,7 @@ export default function SignalsPage() {
                 </tr>
               </thead>
               <tbody>
-                {q.data.rows.map((r) => (
+                {(q.data.rows ?? []).map((r) => (
                   <tr key={r.symbol} className="border-b border-line/40 hover:bg-bg-subtle/30">
                     <td className="py-2 pr-3">
                       <Link
@@ -156,10 +163,10 @@ export default function SignalsPage() {
                       ) : "—"}
                     </td>
                     <td className="pr-3 text-xs">
-                      {r.triggers.length === 0 ? (
+                      {(r.triggers ?? []).length === 0 ? (
                         <span className="text-ink-soft">—</span>
                       ) : (
-                        r.triggers.slice(0, 4).map((t, i) => (
+                        (r.triggers ?? []).slice(0, 4).map((t, i) => (
                           <span
                             key={i}
                             className={clsx(
@@ -174,12 +181,88 @@ export default function SignalsPage() {
                       )}
                     </td>
                     <td className="pr-3 text-xs text-ink-muted">
-                      {[...r.patterns, ...r.divergences].slice(0, 3).join(", ") || "—"}
+                      {[...(r.patterns ?? []), ...(r.divergences ?? [])].slice(0, 3).join(", ") || "—"}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </section>
+
+          <section className="grid gap-3 md:hidden">
+            {(q.data.rows ?? []).map((r) => (
+              <article key={r.symbol} className="card space-y-2">
+                <header className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/token/${r.symbol.split("/")[0].toLowerCase()}`}
+                    className="text-base font-medium tracking-tight hover:text-accent"
+                  >
+                    {r.symbol}
+                  </Link>
+                  <span className={clsx("chip text-[11px]", VERDICT_COLOR[r.verdict])}>
+                    {VERDICT_LABEL[r.verdict]}
+                  </span>
+                </header>
+                <BuySellBar buy={r.buy_pct ?? 50} sell={r.sell_pct ?? 50} />
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums">
+                  <dt className="text-ink-soft">Price</dt>
+                  <dd className="text-right">{r.last_price ? fmtUsd(r.last_price) : "—"}</dd>
+                  <dt className="text-ink-soft">RSI</dt>
+                  <dd className="text-right">
+                    {r.rsi_14 != null ? (
+                      <span className={
+                        r.rsi_14 > 70 ? "text-bear" :
+                        r.rsi_14 < 30 ? "text-bull" : "text-ink"
+                      }>{r.rsi_14.toFixed(1)}</span>
+                    ) : "—"}
+                  </dd>
+                  <dt className="text-ink-soft">RR</dt>
+                  <dd className="text-right">{r.risk_reward != null ? `${r.risk_reward}x` : "—"}</dd>
+                  <dt className="text-ink-soft">Hold</dt>
+                  <dd className="text-right">
+                    {r.suggested_holding_days_min != null
+                      ? `${r.suggested_holding_days_min}–${r.suggested_holding_days_max}d`
+                      : "—"}
+                  </dd>
+                </dl>
+                {r.suggested_entry && r.suggested_stop && r.suggested_target && (
+                  <div className="grid grid-cols-3 gap-1 text-[11px] tabular-nums">
+                    <div className="rounded border border-line/60 px-2 py-1">
+                      <div className="text-ink-soft">Entry</div>
+                      <div>{fmtUsd(r.suggested_entry)}</div>
+                    </div>
+                    <div className="rounded border border-bear/40 px-2 py-1">
+                      <div className="text-ink-soft">Stop</div>
+                      <div className="text-bear">{fmtUsd(r.suggested_stop)}</div>
+                    </div>
+                    <div className="rounded border border-bull/40 px-2 py-1">
+                      <div className="text-ink-soft">Target</div>
+                      <div className="text-bull">{fmtUsd(r.suggested_target)}</div>
+                    </div>
+                  </div>
+                )}
+                {(r.triggers ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(r.triggers ?? []).slice(0, 4).map((t, i) => (
+                      <span
+                        key={i}
+                        className={clsx(
+                          "rounded px-1.5 py-0.5 text-[11px]",
+                          t.kind === "enter_long" ? "bg-bull/15 text-bull" : "bg-bear/15 text-bear",
+                        )}
+                      >
+                        {t.kind === "enter_long" ? "L" : "S"}·{t.strategy.split("_")[0]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {((r.patterns ?? []).length > 0 || (r.divergences ?? []).length > 0) && (
+                  <p className="text-[11px] text-ink-muted">
+                    {[...(r.patterns ?? []), ...(r.divergences ?? [])].slice(0, 4).join(" · ")}
+                  </p>
+                )}
+              </article>
+            ))}
           </section>
 
           <section className="card text-xs text-ink-muted">

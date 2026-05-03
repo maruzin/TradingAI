@@ -95,7 +95,7 @@ async def run(
     async def _score_one(pair: str, cg_id: str) -> None:
         async with sem:
             try:
-                fr = await historical.fetch(FetchSpec(
+                fr = await historical.fetch_with_fallback(FetchSpec(
                     symbol=pair, exchange="binance",
                     timeframe=timeframe,                       # type: ignore[arg-type]
                     since_utc=since, until_utc=until,
@@ -301,7 +301,11 @@ def main() -> int:
         pick_count=args.pick_count,
         notify=not args.no_notify,
     ))
-    print(result)
+    # CLI contract: emit a single JSON line to stdout so callers can pipe it
+    # into jq / a log shipper. Structured fields go through the logger above.
+    import json as _json
+    import sys as _sys
+    _sys.stdout.write(_json.dumps(result, default=str) + "\n")
     return 0 if result.get("status") == "completed" else 1
 
 

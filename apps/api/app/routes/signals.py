@@ -48,7 +48,7 @@ async def get_signals(
     async def _one(pair: str) -> None:
         async with sem:
             try:
-                fr = await client.fetch(FetchSpec(
+                fr = await client.fetch_with_fallback(FetchSpec(
                     symbol=pair, exchange="binance",
                     timeframe=timeframe,                       # type: ignore[arg-type]
                     since_utc=since, until_utc=until,

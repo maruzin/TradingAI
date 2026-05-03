@@ -5,10 +5,12 @@ import { TokenCard } from "@/components/TokenCard";
 import { Disclaimer } from "@/components/Disclaimer";
 import { api, type Watchlist } from "@/lib/api";
 import { Plus, Trash2 } from "lucide-react";
+import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
 
 const FALLBACK_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "LINK"];
 
 export default function Home() {
+  const refresh = useRefreshIntervals();
   const wl = useQuery({ queryKey: ["watchlists"], queryFn: () => api.watchlists().then((d) => d.watchlists), retry: false });
   const isAuthed = !wl.isError;
 
@@ -17,7 +19,7 @@ export default function Home() {
   const markets = useQuery({
     queryKey: ["markets", 1],
     queryFn: () => api.markets(1, "market_cap_desc"),
-    refetchInterval: 60_000,
+    refetchInterval: toRefetchInterval(refresh.pricesMs),
     enabled: !isAuthed,
   });
 
@@ -114,7 +116,7 @@ function WatchlistView({ list }: { list: Watchlist }) {
       </header>
       {add.error && <p className="text-bear text-xs">{String(add.error.message).slice(0, 200)}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {list.items.map((it) => (
+        {(list.items ?? []).map((it) => (
           <div key={it.id} className="relative">
             <TokenCard symbol={it.coingecko_id || it.symbol} />
             <button
@@ -126,7 +128,7 @@ function WatchlistView({ list }: { list: Watchlist }) {
             </button>
           </div>
         ))}
-        {list.items.length === 0 && (
+        {(list.items ?? []).length === 0 && (
           <p className="text-sm text-ink-soft col-span-full">empty — add a token above</p>
         )}
       </div>
