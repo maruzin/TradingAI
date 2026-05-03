@@ -54,10 +54,18 @@ export default function TokenPage() {
     <div className="space-y-5">
       <Header snapshot={snap.data} symbol={symbol} horizon={horizon} />
 
-      <TradingViewWidget
-        symbol={(snap.data?.symbol || symbol).toUpperCase()}
-        height={520}
-      />
+      <div className="block sm:hidden">
+        <TradingViewWidget
+          symbol={(snap.data?.symbol || symbol).toUpperCase()}
+          height={360}
+        />
+      </div>
+      <div className="hidden sm:block">
+        <TradingViewWidget
+          symbol={(snap.data?.symbol || symbol).toUpperCase()}
+          height={520}
+        />
+      </div>
 
       <BriefSection brief={brief} />
 

@@ -10,16 +10,34 @@
   html, body {
     @apply bg-bg text-ink antialiased;
     font-feature-settings: "ss01", "cv11";
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   ::selection {
     @apply bg-accent/30 text-ink;
   }
+
+  html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent rounded-sm;
+  }
+
+  input, select, textarea, button { font: inherit; }
+
+  /* Better hit targets on touch devices */
+  @media (hover: none) {
+    button, a { min-height: 36px; }
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-bg-soft p-4;
+    @apply rounded-xl border border-line bg-bg-soft p-4 transition-all duration-200;
+  }
+  .card:hover {
+    @apply border-line/80;
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border border-line bg-bg-subtle px-2 py-0.5 text-xs;
@@ -27,15 +45,60 @@
   .chip-bull { @apply text-bull border-bull/40; }
   .chip-bear { @apply text-bear border-bear/40; }
   .chip-warn { @apply text-warn border-warn/40; }
+
+  /* Skeleton with subtle gradient shimmer */
+  .skeleton {
+    @apply relative overflow-hidden rounded bg-bg-subtle;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(124, 156, 255, 0.06) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+}
+
+@layer utilities {
+  /* iOS notch / home-bar safe areas */
+  .safe-area-y {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Useful for tables that need to scroll horizontally on mobile */
+  .scroll-snap-x { scroll-snap-type: x mandatory; }
 }
 
 /* Markdown brief rendering */
 .brief-prose h1, .brief-prose h2, .brief-prose h3 {
-  @apply text-ink font-semibold;
+  @apply text-ink font-semibold tracking-tight;
 }
+.brief-prose h1 { @apply mt-0 mb-3 text-2xl; }
 .brief-prose h2 { @apply mt-6 mb-2 text-lg; }
 .brief-prose h3 { @apply mt-4 mb-1 text-base; }
-.brief-prose p, .brief-prose li { @apply text-ink-muted; }
-.brief-prose ul { @apply list-disc pl-6; }
+.brief-prose p, .brief-prose li { @apply text-ink-muted leading-relaxed; }
+.brief-prose ul { @apply list-disc pl-6 space-y-1; }
+.brief-prose ol { @apply list-decimal pl-6 space-y-1; }
 .brief-prose code { @apply rounded bg-bg-subtle px-1 py-0.5 font-mono text-sm; }
-.brief-prose a { @apply text-accent underline-offset-2 hover:underline; }
+.brief-prose a { @apply text-accent underline underline-offset-2 hover:text-bull transition-colors; }
+.brief-prose blockquote {
+  @apply border-l-2 border-line pl-3 italic text-ink-soft;
+}
+.brief-prose strong { @apply text-ink font-semibold; }
+.brief-prose hr { @apply my-4 border-line; }
+.brief-prose table { @apply w-full text-sm my-3; }
+.brief-prose th { @apply text-left text-ink-muted border-b border-line py-1 pr-3; }
+.brief-prose td { @apply border-b border-line/50 py-1 pr-3; }
