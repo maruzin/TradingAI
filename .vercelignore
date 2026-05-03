@@ -1,0 +1,38 @@
+# Vercel only deploys the Next.js frontend at apps/web — everything else stays out.
+# This prevents Vercel from auto-detecting apps/api/pyproject.toml and bundling
+# the FastAPI backend as a serverless function (which blows past Lambda limits).
+
+apps/api/
+infra/
+eval/
+skills/
+docs/
+.github/
+*.md
+!apps/web/**
+!apps/web
+
+# Local/editor noise
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+.next/
+out/
+
+# Secrets — never deploy
+.env
+.env.*
+!.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local data
+data/
+*.sqlite
+*.db
