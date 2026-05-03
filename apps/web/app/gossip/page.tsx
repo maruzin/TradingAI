@@ -4,6 +4,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { api, type GossipEvent } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
+import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
 
 const KIND_COLOR: Record<string, string> = {
   news: "border-accent/40 text-accent",
@@ -30,11 +31,12 @@ const ALL_KINDS = ["news", "social", "onchain", "macro", "influencer", "whale"];
 export default function GossipPage() {
   const [kinds, setKinds] = useState<string[]>(ALL_KINDS);
   const [minImpact, setMinImpact] = useState(0);
+  const refreshTier = useRefreshIntervals();
 
   const q = useQuery({
     queryKey: ["gossip", kinds.sort().join(","), minImpact],
     queryFn: () => api.gossip({ kinds, min_impact: minImpact, limit: 200 }),
-    refetchInterval: 5 * 60_000,
+    refetchInterval: toRefetchInterval(refreshTier.gossipMs),
   });
 
   const refresh = useMutation({

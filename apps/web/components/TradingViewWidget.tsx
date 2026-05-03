@@ -2,29 +2,43 @@
 import { useEffect, useRef } from "react";
 
 /**
- * TradingView's free embeddable widget. Renders a candle chart with multiple
- * timeframes, indicators, and drawing tools. Reads the global TradingView
- * symbol notation (e.g., "BINANCE:BTCUSDT").
+ * TradingView free embeddable widget. The `interval` prop maps to TradingView's
+ * raw interval codes:
+ *   1m=1, 5m=5, 15m=15, 30m=30, 1h=60, 4h=240, 1D=D, 1W=W, 1M=M
  */
+export type TFCode = "1" | "5" | "15" | "30" | "60" | "240" | "D" | "W" | "M";
+
+export const TF_OPTIONS: { code: TFCode; label: string }[] = [
+  { code: "1", label: "1m" },
+  { code: "5", label: "5m" },
+  { code: "15", label: "15m" },
+  { code: "30", label: "30m" },
+  { code: "60", label: "1h" },
+  { code: "240", label: "4h" },
+  { code: "D", label: "1D" },
+  { code: "W", label: "1W" },
+  { code: "M", label: "1M" },
+];
+
 export function TradingViewWidget({
   symbol,
   exchange = "BINANCE",
   quote = "USDT",
   height = 480,
   theme = "dark",
+  interval = "240",
 }: {
   symbol: string;
   exchange?: string;
   quote?: string;
   height?: number;
   theme?: "dark" | "light";
+  interval?: TFCode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-
-    // Clear previous widget if symbol changed
     containerRef.current.innerHTML = "";
 
     const tvSymbol = `${exchange}:${symbol.toUpperCase()}${quote}`;
@@ -36,7 +50,7 @@ export function TradingViewWidget({
     script.innerHTML = JSON.stringify({
       autosize: true,
       symbol: tvSymbol,
-      interval: "240",
+      interval,
       timezone: "Etc/UTC",
       theme,
       style: "1",
@@ -50,13 +64,10 @@ export function TradingViewWidget({
       support_host: "https://www.tradingview.com",
     });
     containerRef.current.appendChild(script);
-  }, [symbol, exchange, quote, theme]);
+  }, [symbol, exchange, quote, theme, interval]);
 
   return (
-    <div
-      className="card overflow-hidden p-0"
-      style={{ height }}
-    >
+    <div className="card overflow-hidden p-0" style={{ height }}>
       <div className="tradingview-widget-container h-full w-full" ref={containerRef}>
         <div className="tradingview-widget-container__widget h-full w-full" />
       </div>

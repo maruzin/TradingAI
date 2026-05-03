@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { api, type AlertRow } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Bell, BellOff, CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
+import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
 
 export default function AlertsPage() {
   return (
@@ -180,7 +181,8 @@ const SEV_ICON = {
 
 function Inbox() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["alerts"], queryFn: () => api.alerts().then((d) => d.alerts), retry: false, refetchInterval: 30_000 });
+  const refresh = useRefreshIntervals();
+  const q = useQuery({ queryKey: ["alerts"], queryFn: () => api.alerts().then((d) => d.alerts), retry: false, refetchInterval: toRefetchInterval(refresh.alertsMs) });
   const markRead = useMutation({
     mutationFn: (id: string) => api.markAlertRead(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),

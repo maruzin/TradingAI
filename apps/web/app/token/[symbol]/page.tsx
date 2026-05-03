@@ -1,13 +1,16 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
-import { TradingViewWidget } from "@/components/TradingViewWidget";
+import { TradingViewWidget, TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
 import clsx from "clsx";
+
+const TF_LS_KEY = "tradingai:tf";
+const VALID_TF = new Set<TFCode>(TF_OPTIONS.map((o) => o.code));
 
 // This page is session/dynamic — never statically generate it.
 export const dynamic = "force-dynamic";
@@ -31,8 +34,33 @@ const STAGES = [
 export default function TokenPage() {
   const routeParams = useParams<{ symbol: string }>();
   const sp = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const symbol = routeParams?.symbol ?? "bitcoin";
   const horizon = (sp?.get("horizon") as "swing" | "position" | "long" | null) ?? "position";
+
+  const tfFromUrl = sp?.get("tf");
+  const [tf, setTfState] = useState<TFCode>(() => {
+    if (tfFromUrl && VALID_TF.has(tfFromUrl as TFCode)) return tfFromUrl as TFCode;
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem(TF_LS_KEY);
+      if (stored && VALID_TF.has(stored as TFCode)) return stored as TFCode;
+    }
+    return "240";
+  });
+
+  const setTf = useCallback(
+    (next: TFCode) => {
+      setTfState(next);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(TF_LS_KEY, next);
+      }
+      const params = new URLSearchParams(sp?.toString() ?? "");
+      params.set("tf", next);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, sp],
+  );
 
   // Snapshot loads instantly — no LLM. Renders price + chart immediately.
   const snap = useQuery({
@@ -54,22 +82,62 @@ export default function TokenPage() {
     <div className="space-y-5">
       <Header snapshot={snap.data} symbol={symbol} horizon={horizon} />
 
+      <TimeframeBar tf={tf} onChange={setTf} />
+
       <div className="block sm:hidden">
         <TradingViewWidget
           symbol={(snap.data?.symbol || symbol).toUpperCase()}
           height={360}
+          interval={tf}
         />
       </div>
       <div className="hidden sm:block">
         <TradingViewWidget
           symbol={(snap.data?.symbol || symbol).toUpperCase()}
           height={520}
+          interval={tf}
         />
       </div>
 
       <BriefSection brief={brief} />
 
       <Disclaimer />
+    </div>
+  );
+}
+
+function TimeframeBar({
+  tf,
+  onChange,
+}: {
+  tf: TFCode;
+  onChange: (next: TFCode) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Chart timeframe"
+      className="flex items-center gap-1 overflow-x-auto rounded-lg border border-line bg-bg-soft/40 p-1 text-xs"
+    >
+      {TF_OPTIONS.map((opt) => {
+        const active = tf === opt.code;
+        return (
+          <button
+            key={opt.code}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.code)}
+            className={clsx(
+              "min-w-[44px] rounded-md px-3 py-2 font-mono tracking-tight transition-colors",
+              active
+                ? "bg-accent/15 text-accent"
+                : "text-ink-muted hover:text-ink hover:bg-bg-subtle",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

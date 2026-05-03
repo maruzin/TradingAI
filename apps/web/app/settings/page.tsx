@@ -2,16 +2,105 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { usePrefs, REFRESH_TIERS, type RefreshTier } from "@/lib/prefs";
+import { TF_OPTIONS } from "@/components/TradingViewWidget";
 
 export default function SettingsPage() {
   const mint = useMutation({ mutationFn: () => api.mintTelegramCode() });
   const [copied, setCopied] = useState(false);
+  const tier = usePrefs((s) => s.refreshTier);
+  const setTier = usePrefs((s) => s.setRefreshTier);
+  const defaultTf = usePrefs((s) => s.defaultTimeframe);
+  const setDefaultTf = usePrefs((s) => s.setDefaultTimeframe);
+  const reducedMotion = usePrefs((s) => s.reducedMotion);
+  const setReducedMotion = usePrefs((s) => s.setReducedMotion);
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
       </header>
+
+      <section className="card space-y-4">
+        <div>
+          <h2 className="font-medium">Refresh rate</h2>
+          <p className="text-sm text-ink-muted">
+            How often pages refetch live data. Faster uses more battery and may
+            hit free-tier API limits sooner.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {(Object.keys(REFRESH_TIERS) as RefreshTier[]).map((key) => {
+            const cfg = REFRESH_TIERS[key];
+            const active = tier === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTier(key)}
+                className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                  active
+                    ? "border-accent/60 bg-accent/10"
+                    : "border-line hover:border-accent/40"
+                }`}
+              >
+                <div className="font-medium capitalize">{key}</div>
+                <div className="text-xs text-ink-muted">{cfg.label}</div>
+                <div className="mt-1 text-[11px] font-mono text-ink-soft">
+                  prices {cfg.pricesMs ? `${cfg.pricesMs / 1000}s` : "off"} · gossip {cfg.gossipMs ? `${cfg.gossipMs / 60_000}m` : "off"} · alerts {cfg.alertsMs ? `${cfg.alertsMs / 1000}s` : "off"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="card space-y-3">
+        <div>
+          <h2 className="font-medium">Default chart timeframe</h2>
+          <p className="text-sm text-ink-muted">
+            Used the first time you open a token page. You can still toggle per-token afterwards.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {TF_OPTIONS.map((opt) => {
+            const active = defaultTf === opt.code;
+            return (
+              <button
+                key={opt.code}
+                onClick={() => setDefaultTf(opt.code)}
+                className={`min-w-[44px] rounded-md border px-3 py-2 text-xs font-mono transition-colors ${
+                  active ? "border-accent/60 bg-accent/10 text-accent" : "border-line text-ink-muted hover:text-ink"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="card flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-medium">Reduce motion</h2>
+          <p className="text-sm text-ink-muted">
+            Disable progress bars, spinners, and pulsing dots. Helps if motion-sensitive.
+          </p>
+        </div>
+        <button
+          role="switch"
+          aria-checked={reducedMotion}
+          onClick={() => setReducedMotion(!reducedMotion)}
+          className={`relative h-6 w-11 rounded-full border transition-colors ${
+            reducedMotion ? "bg-accent/40 border-accent/60" : "bg-bg-subtle border-line"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-ink transition-transform ${
+              reducedMotion ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </section>
 
       <section className="card space-y-3">
         <h2 className="font-medium">Link Telegram</h2>

@@ -75,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
 
-            <footer className="border-t border-line text-center text-xs text-ink-soft py-4 px-4 hidden sm:block">
+            <footer className="border-t border-line text-center text-[11px] sm:text-xs text-ink-soft py-3 px-4 mb-16 sm:mb-0">
               Not investment advice. TradingAI is a personal research tool. Outputs may be wrong, incomplete, or stale. Do your own research.
             </footer>
 
