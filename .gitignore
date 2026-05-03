@@ -2,6 +2,13 @@
 .env
 .env.*
 !.env.example
+*password*.txt
+*credentials*
+*.secret
+*.pem
+*.key
+secrets/
+.secrets/
 
 # Python
 __pycache__/

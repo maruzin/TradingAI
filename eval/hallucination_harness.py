@@ -305,6 +305,13 @@ def render_markdown_report(provider: str, results: list[CaseResult]) -> str:
 
 
 def main() -> int:
+    # Force UTF-8 stdout/stderr so emoji and Unicode in the report don't crash on
+    # Windows consoles using cp1252.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(description="TradingAI hallucination harness")
     parser.add_argument("--provider", default="anthropic", help="LLM provider name")
     parser.add_argument("--report-out", default=None, help="Path to write markdown report")

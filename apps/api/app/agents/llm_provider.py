@@ -12,6 +12,7 @@ Phase 2: OllamaProvider on the M-series Mac via Tailscale; MLXProvider later.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -143,7 +144,7 @@ class AnthropicProvider:
         text = "".join(getattr(b, "text", "") for b in resp.content)
         sources = _extract_sources_from_text(text)
 
-        return LLMResponse(
+        first = LLMResponse(
             text=text,
             sources=sources,
             usage=Usage(
@@ -154,6 +155,12 @@ class AnthropicProvider:
             provider=self.name,
             model=model_id,
         )
+        if require_citations and not first.sources:
+            return await _ensure_citations(
+                self, first, system, messages,
+                model=model_id, temperature=temperature, max_tokens=max_tokens,
+            )
+        return first
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         # Anthropic doesn't ship a dedicated embeddings API. Fall back to OpenAI for
@@ -198,7 +205,7 @@ class OpenAIProvider:
         )
         text = resp.choices[0].message.content or ""
         sources = _extract_sources_from_text(text)
-        return LLMResponse(
+        first = LLMResponse(
             text=text,
             sources=sources,
             usage=Usage(
@@ -209,6 +216,12 @@ class OpenAIProvider:
             provider=self.name,
             model=model_id,
         )
+        if require_citations and not first.sources:
+            return await _ensure_citations(
+                self, first, system, messages,
+                model=model_id, temperature=temperature, max_tokens=max_tokens,
+            )
+        return first
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         resp = await self.client.embeddings.create(model="text-embedding-3-large", input=texts)
@@ -249,7 +262,7 @@ class OllamaProvider:
         data = r.json()
         text = data.get("response", "")
         sources = _extract_sources_from_text(text)
-        return LLMResponse(
+        first = LLMResponse(
             text=text,
             sources=sources,
             usage=Usage(
@@ -260,6 +273,12 @@ class OllamaProvider:
             provider=self.name,
             model=model_id,
         )
+        if require_citations and not first.sources:
+            return await _ensure_citations(
+                self, first, system, messages,
+                model=model_id, temperature=temperature, max_tokens=max_tokens,
+            )
+        return first
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
@@ -384,63 +403,116 @@ def _flatten_for_ollama(system: str, messages: list[Message]) -> str:
 
 _SOURCE_BLOCK_HINTS = ("## Sources", "## sources", "Sources:", "SOURCES:")
 
+# Strips leading list markers like "1.", "-", "*", "•", "[1]" — but NEVER touches
+# trailing characters, so URLs that end in digits or `)` are preserved.
+_LIST_MARKER_RE = re.compile(r"^\s*(?:[-*•]|\[?\d+[.\]]?)\s*")
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)(.*)$")
+
 
 def _extract_sources_from_text(text: str) -> list[Source]:
     """Best-effort source extraction from a Markdown completion.
 
-    Looks for a ## Sources block and parses ``[N] [Title](URL) — retrieved ...`` lines.
-    Falls back to scanning JSON code fences for a ``sources`` array.
+    Order of preference:
+      1. ``"sources"`` array in any ```json fenced block.
+      2. Markdown ``## Sources`` section parsed line-by-line.
     """
     if not text:
         return []
 
-    # 1. JSON-fenced sources block (preferred — model is asked to emit one)
-    fence_start = text.find("```json")
-    if fence_start != -1:
-        fence_end = text.find("```", fence_start + 7)
-        if fence_end != -1:
-            blob = text[fence_start + 7 : fence_end].strip()
-            try:
-                data = json.loads(blob)
-                src = data.get("sources") if isinstance(data, dict) else None
-                if isinstance(src, list):
-                    return [
-                        Source(
-                            title=str(s.get("title", "")),
-                            url=str(s.get("url", "")),
-                            retrieved_at=s.get("retrieved_at"),
-                        )
-                        for s in src
-                        if isinstance(s, dict) and s.get("url")
-                    ]
-            except Exception:
-                pass
+    # 1. JSON-fenced sources block (preferred — model is asked to emit one).
+    # Scan ALL json fences, not just the first — analyst output puts sources
+    # in a trailing schema fence, but other JSON may appear earlier.
+    for m in re.finditer(r"```json\s*(.*?)```", text, re.DOTALL):
+        blob = m.group(1).strip()
+        try:
+            data = json.loads(blob)
+        except Exception:
+            continue
+        src = data.get("sources") if isinstance(data, dict) else None
+        if isinstance(src, list) and src:
+            parsed = [
+                Source(
+                    title=str(s.get("title", "")),
+                    url=str(s.get("url", "")),
+                    retrieved_at=s.get("retrieved_at"),
+                )
+                for s in src
+                if isinstance(s, dict) and s.get("url")
+            ]
+            if parsed:
+                return parsed
 
-    # 2. Markdown ## Sources section
+    # 2. Markdown ``## Sources`` section
     for hint in _SOURCE_BLOCK_HINTS:
         idx = text.find(hint)
         if idx == -1:
             continue
         block = text[idx:]
         sources: list[Source] = []
-        for line in block.splitlines()[1:]:
-            line = line.strip(" -*1234567890.[]")
+        for raw in block.splitlines()[1:]:
+            line = _LIST_MARKER_RE.sub("", raw).rstrip()
             if not line:
                 if sources:
                     break
                 continue
-            # parse [Title](URL) — retrieved YYYY-...
-            ob, cb, op, cp = line.find("["), line.find("]"), line.find("("), line.find(")")
-            if -1 in (ob, cb, op, cp) or not (ob < cb < op < cp):
+            # Stop at the next markdown heading.
+            if line.startswith("#"):
+                break
+            link = _MD_LINK_RE.search(line)
+            if not link:
                 continue
-            title = line[ob + 1 : cb]
-            url = line[op + 1 : cp]
-            tail = line[cp + 1 :]
-            ret = None
+            title, url, tail = link.group(1), link.group(2), link.group(3)
+            ret: str | None = None
             if "retrieved" in tail.lower():
-                ret = tail.split("retrieved", 1)[-1].strip(" -:")
-            sources.append(Source(title=title, url=url, retrieved_at=ret))
+                ret = tail.split("retrieved", 1)[-1].strip(" -:—")
+            sources.append(Source(title=title.strip(), url=url.strip(), retrieved_at=ret))
         if sources:
             return sources
 
     return []
+
+
+_CITATION_NUDGE = (
+    "Your previous reply did not include a `## Sources` section or a `sources` array "
+    "in the trailing JSON fence. Re-emit the entire reply, but add a numbered "
+    "`## Sources` block listing every URL you relied on with `retrieved_at` timestamps, "
+    "and ensure the trailing JSON fence's `sources` field is populated. Do not invent URLs."
+)
+
+
+async def _ensure_citations(
+    provider: "LLMProvider",
+    response: LLMResponse,
+    system: str,
+    messages: list[Message],
+    *,
+    model: str | None,
+    temperature: float,
+    max_tokens: int,
+) -> LLMResponse:
+    """If require_citations is on and the first response is unsourced, ask once more.
+
+    Hops at most once — never recurses. The retry is wired only in providers that
+    have an actual underlying client; routing/killed/test harness all skip naturally.
+    """
+    if response.sources:
+        return response
+    log.warning("llm.unsourced_first_pass", provider=response.provider, model=response.model)
+    follow_up = list(messages) + [
+        Message(role="assistant", content=response.text),
+        Message(role="user", content=_CITATION_NUDGE),
+    ]
+    second = await provider.complete(  # type: ignore[attr-defined]
+        system=system,
+        messages=follow_up,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        require_citations=False,  # break the recursion explicitly
+    )
+    if second.sources:
+        return second
+    log.warning("llm.unsourced_second_pass", provider=second.provider)
+    # Mark the original response as unsourced (sources stays empty); caller decides
+    # whether to display the brief with a warning chip or reject it.
+    return response

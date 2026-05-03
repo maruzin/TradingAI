@@ -44,17 +44,22 @@ async def verify_jwt(token: str) -> CurrentUser | None:
     if cached := _from_cache(token):
         return cached
 
-    # Dev-mode shortcut: when SUPABASE_URL not set, accept "dev" tokens —
-    # but ONLY when ENVIRONMENT != "production". This prevents an accidental
-    # missing-env-var deploy from granting admin to anyone sending "dev".
-    if not settings.supabase_url:
-        if settings.environment == "production":
+    # Dev-mode shortcut: accept the literal "dev" token only when ALL of:
+    #   - settings.allow_dev_auth is explicitly true (env: ALLOW_DEV_AUTH=true)
+    #   - environment != production
+    #   - SUPABASE_URL is missing (forces real Supabase to take precedence)
+    # Any of these missing → no shortcut, regardless of misconfiguration.
+    if settings.environment == "production":
+        if not settings.supabase_url:
             log.error("auth.misconfigured",
                       detail="SUPABASE_URL missing in production; refusing all auth")
             return None
-        if token == "dev":
+        # Fall through to real Supabase verification below.
+    elif not settings.supabase_url:
+        if settings.allow_dev_auth and token == "dev":
             user = CurrentUser(id="00000000-0000-0000-0000-000000000001",
                                 email="dev@local", is_admin=True)
+            log.warning("auth.dev_token_used", env=settings.environment)
             _to_cache(token, user)
             return user
         return None

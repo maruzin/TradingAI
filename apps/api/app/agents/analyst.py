@@ -19,19 +19,60 @@ from typing import Any
 from ..logging_setup import get_logger
 from ..services.coinglass import CoinglassClient
 from ..services.coingecko import CoinGeckoClient, TokenSnapshot
+from ..services.confluence import confluence as compute_confluence
+from ..services.elliott import label as label_elliott
 from ..services.geopolitics import GdeltClient
 from ..services.historical import FetchSpec, HistoricalClient
 from ..services.indicators import compute_snapshot
+from ..services.levels import fibonacci, pivots, volume_profile
 from ..services.macro import MacroOverlay
 from ..services.news import CryptoPanicClient
 from ..services.onchain import OnchainClient
 from ..services.patterns import analyze as analyze_patterns
 from ..services.sentiment import LunarCrushClient
+from ..services.wyckoff import classify as wyckoff_classify
 from .llm_provider import LLMProvider, Message, get_provider
 
 log = get_logger("analyst")
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+# Phrases that violate the analyst voice contract. Match is case-insensitive,
+# whole-word for letter strings, raw for emoji/symbols. We strip these to
+# `[redacted]` rather than rejecting the brief — partial degradation is better
+# than no brief, and the redaction makes violations visible during eval.
+import re as _re_banned
+
+BANNED_PATTERNS: list[tuple[str, _re_banned.Pattern[str]]] = [
+    (label, _re_banned.compile(rf"(?i)\b{label}\b"))
+    for label in (
+        r"to the moon", r"mooning", r"moonshot", r"lambo", r"wagmi", r"ngmi",
+        r"send it", r"sending it", r"gigabullish", r"gigabearish",
+        r"guaranteed", r"sure thing", r"easy money", r"no[- ]brainer", r"free money",
+        r"buy now", r"sell now", r"load up", r"ape in", r"all in",
+        r"trust me", r"screenshot this",
+    )
+]
+EMOJI_RE = _re_banned.compile(
+    "[" "\U0001F300-\U0001F6FF" "\U0001F900-\U0001F9FF" "\U0001F680-\U0001F6FF"
+    "\U00002600-\U000027BF" "]"
+)
+
+
+def _scrub_banned(text: str) -> tuple[str, list[str]]:
+    """Replace banned phrases with [redacted] and return the violation list."""
+    if not text:
+        return text, []
+    hits: list[str] = []
+    out = text
+    for label, rx in BANNED_PATTERNS:
+        if rx.search(out):
+            hits.append(label)
+            out = rx.sub("[redacted]", out)
+    if EMOJI_RE.search(out):
+        hits.append("emoji")
+        out = EMOJI_RE.sub("", out)
+    return out, hits
 
 
 @dataclass
@@ -88,7 +129,7 @@ class AnalystAgent:
         self.coinglass = CoinglassClient()
         self.gdelt = GdeltClient()
         self.prompt_id = "token-brief-v3"
-        self._template = (PROMPTS_DIR / "token_brief_v1.md").read_text(encoding="utf-8")
+        self._template = (PROMPTS_DIR / "token_brief_v3.md").read_text(encoding="utf-8")
 
     async def brief(self, token: str, horizon: str = "position") -> TokenBrief:
         import asyncio
@@ -122,9 +163,13 @@ class AnalystAgent:
         pair = self._guess_pair(snap)
         indicators_block = "_(indicators unavailable: no spot pair on Binance for this token)_"
         patterns_block = "_(patterns unavailable: insufficient OHLCV)_"
+        levels_block = "_(levels unavailable: insufficient OHLCV)_"
+        wyckoff_block = "_(wyckoff unavailable)_"
+        elliott_block = "_(elliott unavailable)_"
+        confluence_block = "_(MTF confluence unavailable)_"
         try:
             now = datetime.now(timezone.utc)
-            fr = await self.historical.fetch(FetchSpec(
+            fr = await self.historical.fetch_with_fallback(FetchSpec(
                 symbol=pair, exchange="binance", timeframe=tf,  # type: ignore[arg-type]
                 since_utc=now - timedelta(days=int(365 * years)), until_utc=now,
             ))
@@ -133,6 +178,48 @@ class AnalystAgent:
                 indicators_block = ind_snap.as_brief_block()
                 pat_report = analyze_patterns(fr.df, symbol=snap.symbol.upper(), timeframe=tf)
                 patterns_block = pat_report.as_brief_block()
+                # Volume profile + pivots + Fibonacci on the same primary frame.
+                vp = volume_profile(fr.df)
+                piv = pivots(fr.df, method="standard")
+                fibs = fibonacci(fr.df)
+                level_lines: list[str] = []
+                if vp:
+                    level_lines.append(vp.as_brief_block())
+                if piv:
+                    level_lines.append(
+                        f"**Pivots (next session)**: P {piv.pivot:.4g} · "
+                        f"R1 {piv.r1:.4g} R2 {piv.r2:.4g} · S1 {piv.s1:.4g} S2 {piv.s2:.4g}"
+                    )
+                if fibs:
+                    level_lines.append(
+                        "**Fibonacci** (auto from last swing): "
+                        + " · ".join(f"{k}: {v:.4g}" for k, v in fibs.retracements.items())
+                    )
+                if level_lines:
+                    levels_block = "\n".join(level_lines)
+                # Wyckoff phase + Elliott candidate
+                wyck = wyckoff_classify(fr.df)
+                wyckoff_block = wyck.as_brief_block()
+                ell = label_elliott(fr.df)
+                elliott_block = ell.as_brief_block()
+                # Multi-TF confluence: pull 1d + 4h + 1h for the same pair.
+                frames: dict[str, "any"] = {tf: fr.df}
+                for extra_tf in ("1d", "4h", "1h"):
+                    if extra_tf == tf:
+                        continue
+                    try:
+                        days = 365 if extra_tf == "1d" else 60 if extra_tf == "4h" else 14
+                        x = await self.historical.fetch_with_fallback(FetchSpec(
+                            symbol=pair, exchange="binance", timeframe=extra_tf,  # type: ignore[arg-type]
+                            since_utc=now - timedelta(days=days), until_utc=now,
+                        ))
+                        if not x.df.empty and len(x.df) >= 30:
+                            frames[extra_tf] = x.df
+                    except Exception:
+                        continue
+                if len(frames) >= 2:
+                    conf = compute_confluence(frames, symbol=snap.symbol.upper())
+                    confluence_block = conf.as_brief_block()
         except Exception as e:
             log.warning("analyst.indicators_failed", token=snap.symbol, error=str(e))
 
@@ -179,6 +266,10 @@ class AnalystAgent:
             .replace("{{patterns_block}}", patterns_block)
             .replace("{{onchain_block}}", onchain_block)
             .replace("{{funding_block}}", funding_block)
+            .replace("{{levels_block}}", levels_block)
+            .replace("{{wyckoff_block}}", wyckoff_block)
+            .replace("{{elliott_block}}", elliott_block)
+            .replace("{{confluence_block}}", confluence_block)
         )
 
         # Pull system + user halves apart from the prompt file's prelude/instructions.
@@ -198,10 +289,24 @@ class AnalystAgent:
         )
 
         markdown, structured = _split_markdown_and_json(resp.text)
+        markdown, banned_hits = _scrub_banned(markdown)
+        if banned_hits:
+            log.warning(
+                "analyst.banned_phrases",
+                token=snap.symbol, prompt_id=self.prompt_id,
+                hits=banned_hits, model=resp.model,
+            )
+            structured.setdefault("quality_flags", []).extend(
+                f"banned:{h}" for h in banned_hits
+            )
+
         sources = structured.get("sources") or [
             {"title": s.title, "url": s.url, "retrieved_at": s.retrieved_at}
             for s in resp.sources
         ]
+        if not sources:
+            structured.setdefault("quality_flags", []).append("unsourced")
+            log.warning("analyst.unsourced_brief", token=snap.symbol)
 
         return TokenBrief(
             token_symbol=snap.symbol.upper(),

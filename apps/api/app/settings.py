@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # Allow the "dev"-token shortcut in auth.py. MUST be explicitly enabled —
+    # never relying on an absent SUPABASE_URL alone to gate it. Production
+    # always rejects regardless of this flag.
+    allow_dev_auth: bool = False
+
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )
