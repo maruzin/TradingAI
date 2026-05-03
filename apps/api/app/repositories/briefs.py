@@ -69,6 +69,30 @@ async def insert_brief(brief: TokenBrief, *, user_id: str | None = None) -> str 
         return None
 
 
+async def previous_brief_before(
+    symbol: str, horizon: str, *, before: datetime, min_age_hours: int = 18,
+) -> dict[str, Any] | None:
+    """Return the most recent brief OLDER than `before - min_age_hours` so the
+    diff endpoint always compares to a previous distinct take rather than the
+    same-cycle regenerate.
+    """
+    cutoff = before - timedelta(hours=min_age_hours)
+    row = await db.fetchrow(
+        """
+        select b.*, t.symbol, t.name, t.chain
+          from briefs b
+          join tokens t on t.id = b.token_id
+         where t.symbol = $1
+           and b.horizon = $2
+           and b.created_at < $3
+         order by b.created_at desc
+         limit 1
+        """,
+        symbol.lower(), horizon, cutoff,
+    )
+    return _row_to_dict(row) if row else None
+
+
 async def latest_brief(symbol: str, horizon: str, *, max_age_hours: int = 6) -> dict[str, Any] | None:
     """Return the most recent fresh brief for (symbol, horizon), if any."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)

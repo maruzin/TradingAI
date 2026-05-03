@@ -304,6 +304,29 @@ export type AdminHealth = {
   cron_last_errors: Record<string, string>;
 };
 
+export type CorrelationMatrix = {
+  symbols: string[];
+  matrix: number[][];
+  window_days: number;
+  notes?: string;
+};
+
+export type PortfolioRisk = {
+  total_value_usd: number;
+  concentration_pct: Record<string, number>;
+  top_position_pct: number;
+  btc_beta: number | null;
+  avg_correlation_to_btc: number | null;
+  largest_drawdown_30d_pct: number | null;
+  notes: string[];
+};
+
+export type BriefDiff = {
+  latest: TokenBrief & { id?: string };
+  previous: (TokenBrief & { id?: string }) | null;
+  changes: { field: string; from: unknown; to: unknown }[];
+};
+
 export type TokenProjection = {
   token_symbol: string;
   as_of_utc: string;
@@ -460,6 +483,18 @@ export const api = {
 
   // admin
   adminHealth: () => jsonFetch<AdminHealth>("/admin/health/snapshot"),
+
+  // correlation + portfolio + brief diff
+  correlation: (symbols: string[], days = 30) =>
+    jsonFetch<CorrelationMatrix>(`/correlation?symbols=${symbols.join(",")}&days=${days}`),
+  portfolioAnalyze: (holdings: { symbol: string; quantity: number; cost_basis_usd?: number }[]) =>
+    jsonFetch<PortfolioRisk>("/portfolio/analyze", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ holdings }),
+    }),
+  briefDiff: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>
+    jsonFetch<BriefDiff>(`/tokens/${encodeURIComponent(symbol)}/brief/diff?horizon=${horizon}`),
 
   // signals
   signals: (params?: { symbols?: string[]; timeframe?: "1h" | "4h" | "1d"; years?: number }) => {

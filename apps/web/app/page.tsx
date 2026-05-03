@@ -143,12 +143,73 @@ function EmptyState() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlists"] }),
   });
   return (
-    <section className="card text-center space-y-3">
-      <p className="text-sm text-ink-muted">No watchlists yet.</p>
-      <button onClick={() => create.mutate()} className="rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-sm hover:bg-accent/20">
-        Create your first watchlist
-      </button>
+    <section className="card space-y-4">
+      <header>
+        <h2 className="font-semibold">Welcome to TradingAI 👋</h2>
+        <p className="text-sm text-ink-muted">
+          Three steps to get value within five minutes.
+        </p>
+      </header>
+      <ol className="space-y-3 text-sm">
+        <li className="flex gap-3">
+          <Step n={1} />
+          <div className="flex-1">
+            <p className="font-medium">Create your first watchlist</p>
+            <p className="text-xs text-ink-muted">
+              Group the tokens you actually care about so the daily picks +
+              setup watcher prioritise them.
+            </p>
+            <button
+              onClick={() => create.mutate()}
+              disabled={create.isPending}
+              className="mt-2 rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs hover:bg-accent/20 disabled:opacity-50"
+            >
+              {create.isPending ? "Creating…" : "Create \"Core\" watchlist"}
+            </button>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <Step n={2} />
+          <div className="flex-1">
+            <p className="font-medium">Generate your first 5-dimension brief</p>
+            <p className="text-xs text-ink-muted">
+              Pick a token from the watchlist and the analyst pulls news,
+              sentiment, on-chain, technical, and macro in one go.
+            </p>
+            <a
+              href="/token/bitcoin"
+              className="mt-2 inline-block rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent/50"
+            >
+              Try BTC →
+            </a>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <Step n={3} />
+          <div className="flex-1">
+            <p className="font-medium">Link Telegram for alerts</p>
+            <p className="text-xs text-ink-muted">
+              Big wallet moves, setup configurations, and your daily morning
+              brief land in your DMs.
+            </p>
+            <a
+              href="/settings"
+              className="mt-2 inline-block rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent/50"
+            >
+              Go to Settings →
+            </a>
+          </div>
+        </li>
+      </ol>
     </section>
+  );
+}
+
+function Step({ n }: { n: number }) {
+  return (
+    <span className="size-7 shrink-0 rounded-full border border-accent/40 bg-accent/10 text-accent text-xs font-mono flex items-center justify-center">
+      {n}
+    </span>
   );
 }
 

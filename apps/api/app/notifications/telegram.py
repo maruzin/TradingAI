@@ -209,10 +209,113 @@ class TelegramBotApp:
                 text=("Commands:\n"
                       "/start &lt;code&gt; — link this chat to your TradingAI account\n"
                       "/help — this message\n"
-                      "/snooze &lt;minutes&gt; — pause alerts (Sprint 3)\n"
-                      "/status — show your alert config (Sprint 3)\n"),
+                      "/snooze &lt;minutes&gt; — silence alerts for N minutes\n"
+                      "/why &lt;symbol&gt; — re-explain the latest brief stance\n"
+                      "/status — your snooze + last-alert state\n"),
             ))
             return
+
+        # Two-way commands the alert flow can reference.
+        if text.startswith("/snooze"):
+            parts = text.split(maxsplit=1)
+            try:
+                minutes = int(parts[1]) if len(parts) > 1 else 60
+            except ValueError:
+                minutes = 60
+            minutes = max(5, min(minutes, 60 * 24))
+            await _set_snooze(chat_id=str(chat_id), minutes=minutes)
+            await self.sender.send(TelegramMessage(
+                chat_id=str(chat_id),
+                text=f"🤫 Alerts snoozed for {minutes} minutes.",
+            ))
+            return
+
+        if text.startswith("/status"):
+            status = await _get_status(chat_id=str(chat_id))
+            await self.sender.send(TelegramMessage(
+                chat_id=str(chat_id),
+                text=status,
+            ))
+            return
+
+        if text.startswith("/why"):
+            parts = text.split(maxsplit=1)
+            symbol = parts[1].strip().upper() if len(parts) > 1 else ""
+            if not symbol:
+                await self.sender.send(TelegramMessage(
+                    chat_id=str(chat_id),
+                    text="Usage: /why &lt;symbol&gt; — e.g. /why BTC",
+                ))
+                return
+            why = await _build_why(symbol=symbol)
+            await self.sender.send(TelegramMessage(chat_id=str(chat_id), text=why))
+            return
+
+
+async def _set_snooze(*, chat_id: str, minutes: int) -> None:
+    """Stash a snooze marker on the user's row. The dispatcher checks it."""
+    try:
+        from .. import db
+        await db.execute(
+            """
+            update users
+               set alerts_snoozed_until = now() + ($2 * interval '1 minute')
+             where telegram_chat_id = $1
+            """,
+            chat_id, minutes,
+        )
+    except Exception as e:
+        log.warning("telegram.snooze_failed", error=str(e))
+
+
+async def _get_status(*, chat_id: str) -> str:
+    try:
+        from .. import db
+        row = await db.fetchrow(
+            """
+            select alerts_snoozed_until
+              from users
+             where telegram_chat_id = $1
+             limit 1
+            """,
+            chat_id,
+        )
+        if not row:
+            return "Account not linked. Send /start &lt;invite-code&gt;."
+        snooze = row.get("alerts_snoozed_until")
+        if snooze is None:
+            return "✅ Alerts on. No snooze active."
+        return f"🤫 Snoozed until {snooze.isoformat()}"
+    except Exception:
+        return "Status unavailable right now. Try again shortly."
+
+
+async def _build_why(*, symbol: str) -> str:
+    """Return a tight one-screen explanation of the latest brief stance.
+
+    Pulls the most recent persisted brief; falls back to a friendly message
+    when none exists yet.
+    """
+    try:
+        from ..repositories import briefs as brief_repo
+        latest = await brief_repo.latest_brief(symbol.lower(), "position", max_age_hours=24 * 7)
+        if not latest:
+            return f"No recent brief for {symbol}. Open the dashboard to generate one."
+        s = latest.get("structured") or {}
+        stance = s.get("stance") or "neutral"
+        tldr = s.get("tldr") or []
+        flags = s.get("red_flags") or []
+        lines = [f"<b>{symbol} — {stance}</b>"]
+        for line in tldr[:3]:
+            lines.append(f"• {line}")
+        if flags:
+            lines.append("\n<b>Red flags</b>:")
+            for f in flags[:3]:
+                lines.append(f"• {f}")
+        lines.append("\n<i>Not investment advice.</i>")
+        return "\n".join(lines)
+    except Exception:
+        return f"Couldn't load the latest brief for {symbol} right now."
 
 
 def main() -> int:

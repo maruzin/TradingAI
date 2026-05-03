@@ -46,6 +46,7 @@
     "@testing-library/react": "^16.0.1",
     "@testing-library/jest-dom": "^6.6.3",
     "jsdom": "^25.0.1",
-    "openapi-typescript": "^7.4.4"
+    "openapi-typescript": "^7.4.4",
+    "axe-core": "^4.10.2"
   }
 }

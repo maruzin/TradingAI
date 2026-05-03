@@ -29,10 +29,25 @@ async def run(_ctx: dict | None = None) -> None:
     sender = TelegramSender()
     sent = 0
     failed = 0
+    snoozed = 0
     started = time.time()
     try:
         for a in pending:
             user_id = a["user_id"]
+            # Honor /snooze from the Telegram bot — keep the alert pending
+            # so it'll deliver after the snooze elapses instead of dropping.
+            try:
+                row = await db.fetchrow(
+                    "select alerts_snoozed_until from users where id = $1::uuid",
+                    user_id,
+                )
+                if row and row.get("alerts_snoozed_until"):
+                    from datetime import datetime, timezone
+                    if row["alerts_snoozed_until"] > datetime.now(timezone.utc):
+                        snoozed += 1
+                        continue
+            except Exception:
+                pass
             chat_id = await users_repo.get_telegram_chat_id(user_id)
             if not chat_id:
                 # No Telegram linked — mark sent so we don't retry forever.
@@ -52,5 +67,5 @@ async def run(_ctx: dict | None = None) -> None:
                 failed += 1
     finally:
         await sender.close()
-    log.info("alert_dispatcher.done", sent=sent, failed=failed,
+    log.info("alert_dispatcher.done", sent=sent, failed=failed, snoozed=snoozed,
              latency_ms=int((time.time() - started) * 1000))

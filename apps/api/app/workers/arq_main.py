@@ -25,6 +25,7 @@ from . import (
     alert_dispatcher,
     backtest_evaluator,
     daily_digest,
+    daily_morning,
     daily_picks,
     gossip_poller,
     price_poller,
@@ -54,6 +55,7 @@ class WorkerSettings:
         cron(setup_watcher.run,       minute={i for i in range(0, 60) if i % 15 == 7}),
         cron(thesis_tracker.run,      minute={7}),
         cron(daily_digest.run,        hour={9}, minute={0}),
+        cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks
         cron(daily_picks.cron_run,    hour={7}, minute={0}),
         cron(backtest_evaluator.run,  hour={1}, minute={0}),
     ]

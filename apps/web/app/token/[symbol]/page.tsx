@@ -306,6 +306,8 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
         <Markdown>{data.markdown}</Markdown>
       </article>
 
+      <BriefDiffPanel symbol={data.token_symbol} horizon={data.horizon} />
+
       {(data.sources ?? []).length > 0 && (
         <section className="card">
           <h2 className="font-medium">Sources ({(data.sources ?? []).length})</h2>
@@ -329,5 +331,38 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
         </section>
       )}
     </>
+  );
+}
+
+function BriefDiffPanel({
+  symbol,
+  horizon,
+}: {
+  symbol: string;
+  horizon: "swing" | "position" | "long";
+}) {
+  const q = useQuery({
+    queryKey: ["brief-diff", symbol, horizon],
+    queryFn: () => api.briefDiff(symbol, horizon),
+    retry: false,
+    refetchOnMount: false,
+  });
+  if (q.isLoading || q.error) return null;
+  const d = q.data;
+  if (!d || !d.previous || (d.changes ?? []).length === 0) return null;
+  return (
+    <section className="card">
+      <h2 className="font-medium">What changed since the previous brief</h2>
+      <ul className="mt-2 space-y-1 text-sm">
+        {(d.changes ?? []).map((c, i) => (
+          <li key={i} className="text-ink-muted">
+            <span className="font-mono text-xs">{c.field}</span>:{" "}
+            <span className="text-bear">{String(c.from ?? "—")}</span>
+            <span className="text-ink-soft mx-1">→</span>
+            <span className="text-bull">{String(c.to ?? "—")}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -146,6 +146,53 @@ async def get_brief(
     return brief.as_response()
 
 
+@router.get("/{symbol}/brief/diff")
+async def get_brief_diff(
+    symbol: str,
+    horizon: str = Query("position", pattern="^(swing|position|long)$"),
+) -> dict:
+    """What changed since yesterday?
+
+    Returns the latest brief side-by-side with the previous one (≥18h older),
+    plus a 'changes' list of structured field deltas. The UI renders this as a
+    delta panel beneath the current brief.
+    """
+    from datetime import datetime, timezone
+    latest = await brief_repo.latest_brief(symbol, horizon, max_age_hours=24 * 7)
+    if not latest:
+        raise HTTPException(404, detail="no recent brief")
+    prev = await brief_repo.previous_brief_before(
+        symbol, horizon, before=datetime.now(timezone.utc), min_age_hours=18,
+    )
+    return {
+        "latest": latest,
+        "previous": prev,
+        "changes": _diff_briefs(latest, prev) if prev else [],
+    }
+
+
+def _diff_briefs(a: dict, b: dict | None) -> list[dict]:
+    """Compute a small list of human-readable structured deltas."""
+    if not b:
+        return []
+    sa = a.get("structured") or {}
+    sb = b.get("structured") or {}
+    out: list[dict] = []
+    for field in ("stance", "confidence"):
+        if sa.get(field) != sb.get(field):
+            out.append({"field": field, "from": sb.get(field), "to": sa.get(field)})
+    # Red flags appearing/disappearing
+    flags_a = set(sa.get("red_flags") or [])
+    flags_b = set(sb.get("red_flags") or [])
+    new_flags = sorted(flags_a - flags_b)
+    cleared_flags = sorted(flags_b - flags_a)
+    for f in new_flags:
+        out.append({"field": "red_flag.new", "from": None, "to": f})
+    for f in cleared_flags:
+        out.append({"field": "red_flag.cleared", "from": f, "to": None})
+    return out
+
+
 @router.get("/{symbol}/projection")
 async def get_projection(
     symbol: str,
