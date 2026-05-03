@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html, body {
+    @apply bg-bg text-ink antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  ::selection {
+    @apply bg-accent/30 text-ink;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-bg-soft p-4;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-bg-subtle px-2 py-0.5 text-xs;
+  }
+  .chip-bull { @apply text-bull border-bull/40; }
+  .chip-bear { @apply text-bear border-bear/40; }
+  .chip-warn { @apply text-warn border-warn/40; }
+}
+
+/* Markdown brief rendering */
+.brief-prose h1, .brief-prose h2, .brief-prose h3 {
+  @apply text-ink font-semibold;
+}
+.brief-prose h2 { @apply mt-6 mb-2 text-lg; }
+.brief-prose h3 { @apply mt-4 mb-1 text-base; }
+.brief-prose p, .brief-prose li { @apply text-ink-muted; }
+.brief-prose ul { @apply list-disc pl-6; }
+.brief-prose code { @apply rounded bg-bg-subtle px-1 py-0.5 font-mono text-sm; }
+.brief-prose a { @apply text-accent underline-offset-2 hover:underline; }

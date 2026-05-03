@@ -1,0 +1,52 @@
+# Fly.io app config for TradingAI backend.
+# Replace `app = "tradingai-api"` with your actual app name after `fly launch --no-deploy`.
+# Three process groups: HTTP API, Telegram long-poll bot, Arq cron worker.
+
+app = "tradingai-api"
+primary_region = "lhr"  # change to nearest: ams, fra, ord, etc.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  ENVIRONMENT = "production"
+
+[processes]
+  app    = "uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers"
+  bot    = "uv run python -m app.notifications.telegram"
+  worker = "uv run arq app.workers.arq_main.WorkerSettings"
+
+[[services]]
+  processes = ["app"]
+  protocol = "tcp"
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    path = "/healthz"
+    method = "GET"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
