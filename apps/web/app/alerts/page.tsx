@@ -135,7 +135,17 @@ function RulesList() {
   });
 
   if (q.isLoading) return <div className="card text-sm text-ink-muted">loading rules…</div>;
-  if (q.error) return <div className="card text-sm text-ink-muted">Sign in to manage your alert rules.</div>;
+  if (q.error) {
+    const msg = String(q.error.message);
+    const is401 = msg.includes("401");
+    return (
+      <div className="card text-sm text-ink-muted">
+        {is401
+          ? "Sign in to manage your alert rules."
+          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
+      </div>
+    );
+  }
   const rules = q.data ?? [];
   if (rules.length === 0) return <div className="card text-sm text-ink-muted">No rules yet.</div>;
 

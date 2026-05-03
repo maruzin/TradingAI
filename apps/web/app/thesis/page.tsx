@@ -15,7 +15,15 @@ const STATUS_COLOR: Record<string, string> = {
 export default function ThesesPage() {
   const q = useQuery({ queryKey: ["theses"], queryFn: () => api.theses().then((d) => d.theses), retry: false });
   if (q.isError) {
-    return <div className="card text-sm text-ink-muted">Sign in to manage your investment theses.</div>;
+    const msg = String(q.error?.message || "");
+    const is401 = msg.includes("401");
+    return (
+      <div className="card text-sm text-ink-muted">
+        {is401
+          ? "Sign in to manage your investment theses."
+          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
+      </div>
+    );
   }
   const theses = q.data ?? [];
 
