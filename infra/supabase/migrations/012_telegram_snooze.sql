@@ -1,14 +1,17 @@
 -- =============================================================================
--- 012 — Telegram snooze column on users
+-- 012 — Telegram snooze column on user_profiles
 --
 -- Adds `alerts_snoozed_until` so the /snooze command from the Telegram bot
 -- can pause alert delivery without dropping rules. The alert_dispatcher
 -- worker checks this before sending; the bot's /status command surfaces it.
+--
+-- Targets `public.user_profiles` (the per-user sidecar created in 003), NOT
+-- `auth.users` — Supabase's `auth.users` is owned by the auth schema and we
+-- never extend it directly.
 -- =============================================================================
 
-alter table users
+alter table user_profiles
     add column if not exists alerts_snoozed_until timestamptz;
 
-create index if not exists users_telegram_chat_id_idx
-    on users (telegram_chat_id)
-    where telegram_chat_id is not null;
+-- Telegram-chat-id index already exists in 003 as user_profiles_telegram_idx;
+-- nothing more to do here.
