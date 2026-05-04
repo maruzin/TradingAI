@@ -12,6 +12,7 @@ import { RegimeBadge } from "@/components/RegimeBadge";
 import { ThemeApplier } from "@/components/ThemeApplier";
 import { KeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { PrefsBootstrap } from "@/components/PrefsBootstrap";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeApplier />
           <KeyboardShortcuts />
           <ServiceWorkerRegister />
+          <PrefsBootstrap />
           <Suspense fallback={null}>
             <TopLoader />
           </Suspense>

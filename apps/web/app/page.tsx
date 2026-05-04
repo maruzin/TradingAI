@@ -1,15 +1,21 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { TokenCard } from "@/components/TokenCard";
 import { Disclaimer } from "@/components/Disclaimer";
 import { CalibrationHero } from "@/components/CalibrationHero";
 import { SectorTile } from "@/components/SectorTile";
 import { ActivityFeed } from "@/components/ActivityFeed";
+import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { api, type Watchlist } from "@/lib/api";
 import { Plus, Trash2, History } from "lucide-react";
 import Link from "next/link";
-import { useRefreshIntervals, toRefetchInterval, usePrefs } from "@/lib/prefs";
+import {
+  useRefreshIntervals,
+  toRefetchInterval,
+  usePrefs,
+  type DashboardSectionId,
+} from "@/lib/prefs";
 
 const FALLBACK_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "LINK"];
 
@@ -18,6 +24,7 @@ export default function Home() {
   const wl = useQuery({ queryKey: ["watchlists"], queryFn: () => api.watchlists().then((d) => d.watchlists), retry: false });
   const isAuthed = !wl.isError;
   const lastToken = usePrefs((s) => s.lastTokenSymbol);
+  const layout = usePrefs((s) => s.dashboardLayout);
 
   // ONE batch call for the demo watchlist instead of 8 parallel snapshot calls.
   // Demo dashboard works without auth; we always render top tokens.
@@ -77,9 +84,11 @@ export default function Home() {
   }
 
   const lists = wl.data ?? [];
-  return (
-    <div className="space-y-8">
-      {lastToken && (
+  // Map each section id → the JSX it should render. Anything not in this map
+  // is silently skipped (defensive against stale layout entries).
+  const sectionRenderers: Record<DashboardSectionId, () => ReactNode> = {
+    resume: () =>
+      lastToken ? (
         <Link
           href={`/token/${lastToken.toLowerCase()}`}
           className="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-accent border border-line rounded-full px-3 py-1 transition-colors"
@@ -87,16 +96,42 @@ export default function Home() {
           <History className="size-3" />
           Resume on {lastToken.toUpperCase()}
         </Link>
-      )}
-      <SectorTile />
-      <CalibrationHero />
-      <ActivityFeed />
-      {lists.length === 0 ? (
-        <EmptyState />
+      ) : null,
+    sector: () => <SectorTile />,
+    calibration: () => <CalibrationHero />,
+    activity: () => <ActivityFeed />,
+    watchlists: () =>
+      lists.length === 0 ? (
+        <>
+          <EmptyState />
+          <CreateWatchlistButton />
+        </>
       ) : (
-        lists.map((l) => <WatchlistView key={l.id} list={l} />)
-      )}
-      <CreateWatchlistButton />
+        <>
+          {lists.map((l) => (
+            <WatchlistView key={l.id} list={l} />
+          ))}
+          <CreateWatchlistButton />
+        </>
+      ),
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="flex items-center justify-between gap-2">
+        <h1 className="sr-only">Dashboard</h1>
+        <span aria-hidden /> {/* spacer so customizer aligns right */}
+        <DashboardCustomizer />
+      </header>
+      {layout.sections
+        .filter((s) => s.visible)
+        .map((s) => {
+          const render = sectionRenderers[s.id];
+          if (!render) return null;
+          const content = render();
+          if (content == null) return null;
+          return <div key={s.id}>{content}</div>;
+        })}
       <Disclaimer />
     </div>
   );

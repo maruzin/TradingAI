@@ -383,6 +383,9 @@ export type RiskProfile = {
   strategy_persona:
     | "balanced" | "momentum" | "mean_reversion"
     | "breakout" | "wyckoff" | "ml_first";
+  // Free-form UI prefs blob — schema lives in apps/web/lib/prefs.ts. Returned
+  // by GET /api/me/profile so the frontend can hydrate everything in one call.
+  ui_prefs?: Record<string, unknown>;
   is_authenticated?: boolean;
   is_default?: boolean;
   db_unavailable?: boolean;
@@ -716,6 +719,23 @@ export const api = {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
+    }),
+
+  // UI prefs blob (dashboard layout, theme, refresh tier, etc.). Backed by
+  // user_profiles.ui_prefs (jsonb) — see migration 015. Anonymous fallback
+  // is handled client-side; these calls are 401-safe (the frontend just
+  // doesn't invoke them when the user isn't signed in).
+  patchUIPrefs: (prefs: Record<string, unknown>) =>
+    jsonFetch<{ ui_prefs: Record<string, unknown> }>("/me/ui-prefs", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prefs }),
+    }),
+  putUIPrefs: (prefs: Record<string, unknown>) =>
+    jsonFetch<{ ui_prefs: Record<string, unknown> }>("/me/ui-prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prefs }),
     }),
 
   // activity feed
