@@ -10,6 +10,11 @@
 secrets/
 .secrets/
 
+# ML model artifacts — created at runtime by predictor_trainer or
+# the lazy-train code path on first /forecast hit. Never commit binaries.
+apps/api/models/*.pkl
+apps/api/models/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -321,6 +321,19 @@ export type PortfolioRisk = {
   notes: string[];
 };
 
+export type SectorIndices = {
+  btc_dominance_pct: number | null;
+  eth_dominance_pct: number | null;
+  stables_dominance_pct: number | null;
+  alts_dominance_pct: number | null;
+  eth_btc_ratio: number | null;
+  eth_btc_30d_pct: number | null;
+  total_market_cap_usd: number | null;
+  alt_season_score: number | null;
+  alt_season_label: "btc_season" | "rotating" | "alt_season" | null;
+  as_of_utc: string;
+};
+
 export type TokenForecast = {
   symbol: string;
   horizon: "swing" | "position" | "long";
@@ -558,6 +571,9 @@ export const api = {
     }),
   briefDiff: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>
     jsonFetch<BriefDiff>(`/tokens/${encodeURIComponent(symbol)}/brief/diff?horizon=${horizon}`),
+
+  // sector indices
+  sectors: () => jsonFetch<SectorIndices>("/regime/sectors"),
 
   // ML predictor + CVD + EV table + detailed track record
   forecast: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>

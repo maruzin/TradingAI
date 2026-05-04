@@ -71,7 +71,13 @@ def test_cvd_route_returns_offline_when_no_redis(client: TestClient):
     assert "notes" in body
 
 
-def test_forecast_route_404_when_no_model(client: TestClient):
+def test_forecast_route_404_when_no_data(client: TestClient, monkeypatch):
+    """With the historical client stubbed to return empty, lazy training
+    can't succeed → forecast returns None → route raises 404. We mock the
+    forecast service directly so this test is hermetic regardless of what
+    models happen to exist on the developer's disk."""
+    from app.routes import tokens as tokens_route
+    async def fake_forecast(*_a, **_kw): return None
+    monkeypatch.setattr(tokens_route, "predictor_forecast", fake_forecast)
     r = client.get("/api/tokens/btc/forecast?horizon=position")
-    # No model trained in tests → 404
     assert r.status_code == 404

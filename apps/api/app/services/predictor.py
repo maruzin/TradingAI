@@ -294,10 +294,28 @@ def _load_latest(pair: str, horizon: str) -> dict | None:
 
 
 async def forecast(
-    pair: str, *, horizon: str = "position",
+    pair: str, *, horizon: str = "position", train_if_missing: bool = True,
 ) -> Forecast | None:
-    """Make a forecast for the latest bar. Returns None if no model is trained."""
+    """Make a forecast for the latest bar.
+
+    If no trained model exists for this (pair, horizon) and ``train_if_missing``
+    is true, train one now. The first request takes ~3-15s (LightGBM on a
+    4-year daily frame is fast); subsequent requests hit the cached model.
+
+    The weekly cron retrains in batch; this lazy path covers freshly-deployed
+    or new-token cases.
+    """
     payload = _load_latest(pair, horizon)
+    if payload is None and train_if_missing:
+        log.info("predictor.lazy_train_triggered", pair=pair, horizon=horizon)
+        try:
+            train_result = await train_for_symbol(pair, horizon=horizon)
+            if train_result is None:
+                return None
+            payload = _load_latest(pair, horizon)
+        except Exception as e:
+            log.warning("predictor.lazy_train_failed", pair=pair, error=str(e))
+            return None
     if payload is None:
         return None
 

@@ -8,6 +8,7 @@ import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
 import { TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
+import { ShareBrief } from "@/components/ShareBrief";
 import clsx from "clsx";
 
 // TradingView's embed script is ~50kB and only useful client-side. Lazy-load
@@ -283,13 +284,16 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
               {data.provider}/{data.model.split(",")[0]}
             </span>
           </div>
-          <button
-            onClick={() => brief.refetch()}
-            disabled={brief.isFetching}
-            className="rounded-md border border-line px-2 py-1 text-xs hover:border-accent/50 disabled:opacity-50"
-          >
-            {brief.isFetching ? "regenerating…" : "regenerate"}
-          </button>
+          <div className="flex items-center gap-2">
+            <ShareBrief symbol={data.token_symbol} asOfUtc={data.as_of_utc} />
+            <button
+              onClick={() => brief.refetch()}
+              disabled={brief.isFetching}
+              className="rounded-md border border-line px-2 py-1 text-xs hover:border-accent/50 disabled:opacity-50"
+            >
+              {brief.isFetching ? "regenerating…" : "regenerate"}
+            </button>
+          </div>
         </div>
         {tldr.length > 0 && (
           <ul className="mt-3 space-y-1 text-sm">

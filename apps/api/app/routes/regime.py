@@ -15,12 +15,21 @@ from fastapi import APIRouter
 
 from ..logging_setup import get_logger
 from ..services.regime import RegimeSnapshot, snapshot as compute_snapshot
+from ..services.sector_indices import snapshot as sector_snapshot
 
 router = APIRouter()
 log = get_logger("routes.regime")
 
 _CACHE_TTL_SECONDS = 60.0
 _cache: tuple[float, RegimeSnapshot] | None = None
+
+
+@router.get("/sectors")
+async def get_sectors() -> dict[str, Any]:
+    """Sector indices: BTC/ETH dominance, ETH/BTC ratio, alt-season score.
+    Public, cached 5 min."""
+    s = await sector_snapshot()
+    return s.as_dict()
 
 
 @router.get("/snapshot")
