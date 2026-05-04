@@ -268,45 +268,57 @@ alter table ai_calls         enable row level security;
 alter table audit_log        enable row level security;
 
 -- Watchlists
+drop policy if exists "watchlists self" on watchlists;
 create policy "watchlists self" on watchlists
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists "watchlist_items via watchlist" on watchlist_items;
 create policy "watchlist_items via watchlist" on watchlist_items
     for all using (
         exists (select 1 from watchlists w where w.id = watchlist_items.watchlist_id and w.user_id = auth.uid())
     );
 
 -- Briefs (briefs with user_id = null are public-shared scheduled briefs; otherwise user-scoped)
+drop policy if exists "briefs read self or shared" on briefs;
 create policy "briefs read self or shared" on briefs
     for select using (user_id is null or user_id = auth.uid());
+drop policy if exists "briefs write self" on briefs;
 create policy "briefs write self" on briefs
     for insert with check (user_id = auth.uid() or user_id is null);
 
 -- Theses
+drop policy if exists "theses self" on theses;
 create policy "theses self" on theses
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "thesis_evals via thesis" on thesis_evaluations;
 create policy "thesis_evals via thesis" on thesis_evaluations
     for all using (
         exists (select 1 from theses t where t.id = thesis_evaluations.thesis_id and t.user_id = auth.uid())
     );
 
 -- Alerts
+drop policy if exists "alert_rules self" on alert_rules;
 create policy "alert_rules self" on alert_rules
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "alerts self" on alerts;
 create policy "alerts self" on alerts
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- Exchange keys & holdings
+drop policy if exists "exchange_keys self" on exchange_keys;
 create policy "exchange_keys self" on exchange_keys
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "holdings self" on holdings;
 create policy "holdings self" on holdings
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- AI calls (per-user; null user_id rows are global)
+drop policy if exists "ai_calls read self or global" on ai_calls;
 create policy "ai_calls read self or global" on ai_calls
     for select using (user_id is null or user_id = auth.uid());
 
 -- Audit log: user can read own; only service_role writes
+drop policy if exists "audit_log read self" on audit_log;
 create policy "audit_log read self" on audit_log
     for select using (user_id = auth.uid());
 
@@ -320,6 +332,7 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists tokens_touch on tokens;
 create trigger tokens_touch before update on tokens
     for each row execute function touch_updated_at();
 
@@ -456,13 +469,17 @@ create index if not exists hdp_token_tf_idx on historical_decision_points (token
 alter table backtest_runs   enable row level security;
 alter table backtest_trades enable row level security;
 
+drop policy if exists "backtest_runs read self or shared" on backtest_runs;
 create policy "backtest_runs read self or shared" on backtest_runs
     for select using (user_id is null or user_id = auth.uid());
+drop policy if exists "backtest_runs write self" on backtest_runs;
 create policy "backtest_runs write self" on backtest_runs
     for insert with check (user_id = auth.uid() or user_id is null);
+drop policy if exists "backtest_runs update own" on backtest_runs;
 create policy "backtest_runs update own" on backtest_runs
     for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists "backtest_trades via run" on backtest_trades;
 create policy "backtest_trades via run" on backtest_trades
     for select using (
         exists (
@@ -494,10 +511,13 @@ create index if not exists user_profiles_telegram_idx
 
 alter table user_profiles enable row level security;
 
+drop policy if exists "user_profiles self read" on user_profiles;
 create policy "user_profiles self read" on user_profiles
     for select using (user_id = auth.uid());
+drop policy if exists "user_profiles self upsert" on user_profiles;
 create policy "user_profiles self upsert" on user_profiles
     for insert with check (user_id = auth.uid());
+drop policy if exists "user_profiles self update" on user_profiles;
 create policy "user_profiles self update" on user_profiles
     for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -513,6 +533,7 @@ create index if not exists telegram_link_codes_user_idx
     on telegram_link_codes (user_id);
 
 alter table telegram_link_codes enable row level security;
+drop policy if exists "telegram_link_codes self" on telegram_link_codes;
 create policy "telegram_link_codes self" on telegram_link_codes
     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -531,6 +552,7 @@ on conflict (key) do nothing;
 -- Trigger: keep updated_at fresh
 create or replace function touch_user_profile() returns trigger as $$
 begin new.updated_at = now(); return new; end; $$ language plpgsql;
+drop trigger if exists user_profiles_touch on user_profiles;
 create trigger user_profiles_touch before update on user_profiles
     for each row execute function touch_user_profile();
 
@@ -562,15 +584,19 @@ begin
 end $$;
 
 -- Each policy uses ONLY auth.uid() — no cross-table subqueries, no self-SELECT.
+drop policy if exists "user_profiles select self" on public.user_profiles;
 create policy "user_profiles select self" on public.user_profiles
   for select using (user_id = auth.uid());
 
+drop policy if exists "user_profiles insert self" on public.user_profiles;
 create policy "user_profiles insert self" on public.user_profiles
   for insert with check (user_id = auth.uid());
 
+drop policy if exists "user_profiles update self" on public.user_profiles;
 create policy "user_profiles update self" on public.user_profiles
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+drop policy if exists "user_profiles delete self" on public.user_profiles;
 create policy "user_profiles delete self" on public.user_profiles
   for delete using (user_id = auth.uid());
 
@@ -822,9 +848,11 @@ $$;
 -- without round-tripping through the backend.
 -- =============================================================================
 
+drop policy if exists "tokens public read" on tokens;
 create policy "tokens public read" on tokens
   for select using (true);
 
+drop policy if exists "news_items public read" on news_items;
 create policy "news_items public read" on news_items
   for select using (true);
 
@@ -878,8 +906,10 @@ create index if not exists daily_picks_token_idx
 alter table daily_pick_runs enable row level security;
 alter table daily_picks enable row level security;
 
+drop policy if exists "daily_pick_runs public read" on daily_pick_runs;
 create policy "daily_pick_runs public read" on daily_pick_runs
   for select using (true);
+drop policy if exists "daily_picks public read" on daily_picks;
 create policy "daily_picks public read" on daily_picks
   for select using (true);
 
@@ -911,6 +941,7 @@ create index if not exists gossip_events_tokens_idx on gossip_events using gin (
 create index if not exists gossip_events_tags_idx   on gossip_events using gin (tags);
 
 alter table gossip_events enable row level security;
+drop policy if exists "gossip_events public read" on gossip_events;
 create policy "gossip_events public read" on gossip_events
   for select using (true);
 
@@ -924,6 +955,7 @@ create table if not exists influencer_handles (
     unique (handle, platform)
 );
 alter table influencer_handles enable row level security;
+drop policy if exists "influencer_handles public read" on influencer_handles;
 create policy "influencer_handles public read" on influencer_handles
   for select using (true);
 
@@ -987,15 +1019,20 @@ create index if not exists wallet_events_token_ts  on wallet_events (token_symbo
 alter table tracked_wallets enable row level security;
 alter table wallet_events  enable row level security;
 
+drop policy if exists "tracked_wallets read own or global" on tracked_wallets;
 create policy "tracked_wallets read own or global" on tracked_wallets
   for select using (user_id is null or user_id = auth.uid());
+drop policy if exists "tracked_wallets write own" on tracked_wallets;
 create policy "tracked_wallets write own" on tracked_wallets
   for insert with check (user_id = auth.uid());
+drop policy if exists "tracked_wallets update own" on tracked_wallets;
 create policy "tracked_wallets update own" on tracked_wallets
   for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "tracked_wallets delete own" on tracked_wallets;
 create policy "tracked_wallets delete own" on tracked_wallets
   for delete using (user_id = auth.uid());
 
+drop policy if exists "wallet_events public read" on wallet_events;
 create policy "wallet_events public read" on wallet_events
   for select using (true);
 
@@ -1142,6 +1179,7 @@ create index if not exists ta_snapshots_recent on token_ta_snapshots (captured_a
 -- Public-read; the data is non-PII and the same numbers anyone can compute
 -- from public OHLCV. Writes only via service-role (workers).
 alter table token_ta_snapshots enable row level security;
+drop policy if exists "ta_snapshots public read" on token_ta_snapshots;
 create policy "ta_snapshots public read" on token_ta_snapshots
   for select using (true);
 
@@ -1175,5 +1213,6 @@ create index if not exists bot_decisions_token_ts on bot_decisions (token_id, de
 create index if not exists bot_decisions_symbol_ts on bot_decisions (symbol, decided_at desc);
 
 alter table bot_decisions enable row level security;
+drop policy if exists "bot_decisions public read" on bot_decisions;
 create policy "bot_decisions public read" on bot_decisions
   for select using (true);
