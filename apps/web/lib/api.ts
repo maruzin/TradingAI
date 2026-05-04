@@ -374,6 +374,27 @@ export type BotDecisionSummary = {
   invalidation: string[];
 };
 
+export type RiskProfile = {
+  risk_per_trade_pct: number;
+  target_r_multiple: number;
+  time_horizon: "swing" | "position" | "long";
+  max_open_trades: number;
+  min_confidence: number;
+  strategy_persona:
+    | "balanced" | "momentum" | "mean_reversion"
+    | "breakout" | "wyckoff" | "ml_first";
+  is_default?: boolean;
+};
+
+export type ActivityEvent = {
+  ts: string;
+  actor: string;          // 'system' | 'user' | 'agent'
+  action: string;         // e.g. 'bot_decider.cycle', 'profile.update'
+  target: string | null;
+  args: Record<string, unknown>;
+  result: Record<string, unknown>;
+};
+
 export type SectorIndices = {
   btc_dominance_pct: number | null;
   eth_dominance_pct: number | null;
@@ -627,6 +648,19 @@ export const api = {
 
   // sector indices
   sectors: () => jsonFetch<SectorIndices>("/regime/sectors"),
+
+  // risk profile (per-user knobs that drive bot scoring + sizing)
+  riskProfile: () => jsonFetch<RiskProfile>("/me/profile"),
+  patchRiskProfile: (patch: Partial<RiskProfile>) =>
+    jsonFetch<RiskProfile>("/me/profile", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
+
+  // activity feed
+  activity: (limit = 50) =>
+    jsonFetch<{ events: ActivityEvent[] }>(`/activity?limit=${limit}`),
 
   // TA snapshots (per timeframe, written by ta_snapshotter worker)
   taSnapshots: (symbol: string, timeframes: string[] = ["1h","3h","6h","12h"]) =>

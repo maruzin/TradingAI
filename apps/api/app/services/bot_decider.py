@@ -42,9 +42,10 @@ class BotDecision:
     invalidation: list[str]
 
 
-# Weights — tuned conservatively. The MTF confluence carries the most
-# weight because it's already a multi-signal aggregate; the higher
-# timeframes get more credit than 1h.
+# Default weights — conservative, balanced. The MTF confluence carries the
+# most weight because it's already a multi-signal aggregate; higher TFs get
+# more credit than 1h. These are overridden when a user has chosen a
+# `strategy_persona` (see PERSONA_WEIGHTS) or by the weight_tuner worker.
 WEIGHTS = {
     "ta_12h": 0.20,
     "ta_6h":  0.15,
@@ -57,6 +58,51 @@ WEIGHTS = {
     "regime": 0.10,
     "wyckoff_d": 0.05,
 }
+
+# Per-persona weight overrides. Each persona reweights the same components
+# differently — momentum follower leans on MTF/12h trend, mean-reversion
+# contrarian leans on funding + divergences + sentiment, Wyckoff disciple
+# weights daily Wyckoff phase + on-chain heaviest, ml_first trusts the
+# probabilistic forecast above all else.
+PERSONA_WEIGHTS: dict[str, dict[str, float]] = {
+    "balanced": dict(WEIGHTS),
+    "momentum": {
+        **WEIGHTS,
+        "ta_12h": 0.30, "ta_6h": 0.20, "ta_3h": 0.10, "ta_1h": 0.05,
+        "ml_forecast": 0.20, "regime": 0.10,
+        "sentiment": 0.02, "onchain": 0.02, "funding": 0.01,
+    },
+    "mean_reversion": {
+        **WEIGHTS,
+        "ta_12h": 0.10, "ta_6h": 0.10, "ta_3h": 0.10, "ta_1h": 0.10,
+        "funding": 0.20, "sentiment": 0.15, "regime": 0.05,
+        "ml_forecast": 0.15,
+    },
+    "breakout": {
+        **WEIGHTS,
+        "ta_12h": 0.25, "ta_6h": 0.15, "ta_3h": 0.10, "ta_1h": 0.10,
+        "ml_forecast": 0.15, "onchain": 0.10, "regime": 0.10,
+    },
+    "wyckoff": {
+        **WEIGHTS,
+        "ta_12h": 0.25, "ta_6h": 0.10, "ta_3h": 0.05, "ta_1h": 0.02,
+        "wyckoff_d": 0.20, "onchain": 0.15, "ml_forecast": 0.10,
+        "regime": 0.10, "funding": 0.03,
+    },
+    "ml_first": {
+        **WEIGHTS,
+        "ml_forecast": 0.40,
+        "ta_12h": 0.15, "ta_6h": 0.10, "ta_3h": 0.05, "ta_1h": 0.02,
+        "regime": 0.10, "sentiment": 0.05, "onchain": 0.05, "funding": 0.05,
+    },
+}
+
+
+def weights_for(persona: str | None) -> dict[str, float]:
+    """Return the weight dict for the given persona; defaults to 'balanced'."""
+    if not persona:
+        return PERSONA_WEIGHTS["balanced"]
+    return PERSONA_WEIGHTS.get(persona, PERSONA_WEIGHTS["balanced"])
 
 
 def fuse(
@@ -71,6 +117,7 @@ def fuse(
     regime: dict[str, Any] | None = None,
     last_price: float | None = None,
     atr_pct: float | None = None,
+    risk_profile: dict[str, Any] | None = None,
 ) -> BotDecision:
     """Compose a single decision from every signal. Pure function — no I/O.
 
@@ -86,6 +133,13 @@ def fuse(
     invalidation: list[str] = []
     inputs: dict[str, Any] = {}
 
+    # Resolve weights from the user's strategy persona (or balanced default).
+    persona = (risk_profile or {}).get("strategy_persona") or "balanced"
+    weights = weights_for(persona)
+    inputs["persona"] = persona
+    if persona != "balanced":
+        reasoning.append(f"Persona: {persona} — weights re-tilted for this strategy")
+
     # --- TA snapshots (one per timeframe) ---
     if ta_snapshots:
         by_tf = {s["timeframe"]: s for s in ta_snapshots if s.get("timeframe")}
@@ -100,7 +154,7 @@ def fuse(
                 continue
             sign = 1 if stance == "long" else -1
             magnitude = max(0.1, abs(score - 5.0) / 5.0)  # 5/10 = neutral
-            w = WEIGHTS.get(f"ta_{tf}", 0)
+            w = weights.get(f"ta_{tf}", 0)
             weighted_dir += sign * magnitude * w
             weight_used += w
             reasoning.append(
@@ -114,8 +168,8 @@ def fuse(
         # Re-center on 0.5 → -1..+1
         sign = 1 if p_up > 0.5 else -1 if p_up < 0.5 else 0
         magnitude = abs(p_up - 0.5) * 2  # 0..1
-        weighted_dir += sign * magnitude * WEIGHTS["ml_forecast"]
-        weight_used += WEIGHTS["ml_forecast"]
+        weighted_dir += sign * magnitude * weights["ml_forecast"]
+        weight_used += weights["ml_forecast"]
         inputs["ml_p_up"] = p_up
         inputs["ml_p_down"] = forecast.get("p_down")
         reasoning.append(
@@ -132,8 +186,8 @@ def fuse(
             # -1..+1 already; weight directly.
             sign = 1 if score > 0 else -1 if score < 0 else 0
             magnitude = min(1.0, abs(float(score)))
-            weighted_dir += sign * magnitude * WEIGHTS["sentiment"]
-            weight_used += WEIGHTS["sentiment"]
+            weighted_dir += sign * magnitude * weights["sentiment"]
+            weight_used += weights["sentiment"]
             inputs["sentiment_score"] = score
             reasoning.append(
                 f"Sentiment {score:+.2f}, social-volume {sentiment.get('social_volume_pct_change') or 0:+.0f}%"
@@ -146,8 +200,8 @@ def fuse(
             # Outflow = bullish (coins leaving exchanges = HODL accumulation)
             sign = 1 if cex_net < 0 else -1
             magnitude = min(1.0, abs(cex_net) / 5e8)  # cap at $500M
-            weighted_dir += sign * magnitude * WEIGHTS["onchain"]
-            weight_used += WEIGHTS["onchain"]
+            weighted_dir += sign * magnitude * weights["onchain"]
+            weight_used += weights["onchain"]
             inputs["cex_net_flow"] = cex_net
             direction = "outflow (bullish)" if cex_net < 0 else "inflow (bearish)"
             reasoning.append(f"30d CEX net {direction}: ${abs(cex_net)/1e6:.0f}M")
@@ -161,8 +215,8 @@ def fuse(
             sign = -1 if avg > 0.05 else 1 if avg < -0.03 else 0
             magnitude = min(1.0, abs(avg) / 0.10)
             if sign != 0:
-                weighted_dir += sign * magnitude * WEIGHTS["funding"]
-                weight_used += WEIGHTS["funding"]
+                weighted_dir += sign * magnitude * weights["funding"]
+                weight_used += weights["funding"]
                 reasoning.append(
                     f"Funding {avg*100:+.2f}% — "
                     + ("crowded longs, contrarian short bias" if sign < 0 else "shorts overcrowded, contrarian long bias")
@@ -177,7 +231,7 @@ def fuse(
             weighted_dir *= 0.7
         elif regime.get("dxy_state") == "risk-on" and regime.get("liquidity_state") == "expanding":
             reasoning.append("Regime: DXY risk-on + M2 expanding — tailwind for risk")
-            weight_used += WEIGHTS["regime"]
+            weight_used += weights["regime"]
         inputs["regime"] = {
             "btc_phase": regime.get("btc_phase"),
             "dxy_state": regime.get("dxy_state"),
@@ -205,19 +259,38 @@ def fuse(
             stance = "neutral"
         composite = 5.0 + 5.0 * normalized
 
-    # --- Risk plan ---
+    # User's risk profile may downgrade a directional call to "watch" if the
+    # bot's confidence is below their personal threshold. We never override
+    # to make the bot MORE bullish, only ever more cautious.
+    min_confidence = float((risk_profile or {}).get("min_confidence") or 0.0)
+    if stance in ("long", "short") and confidence < min_confidence:
+        reasoning.append(
+            f"Stance downgraded to 'watch' — confidence {confidence:.2f} below "
+            f"your minimum threshold {min_confidence:.2f}"
+        )
+        stance = "watch"
+
+    # --- Risk plan, sized to the user's profile ---
+    # The R-multiple = stop-distance × profile.target_r_multiple. Default
+    # 1.5× ATR stop, 2× R target = 3× ATR target. A profile with target_r=3
+    # gives 4.5× ATR target.
+    target_r = float((risk_profile or {}).get("target_r_multiple") or 2.0)
+    inputs["target_r_multiple"] = target_r
+    inputs["confidence_threshold"] = min_confidence
     suggested_entry = last_price
     suggested_stop = None
     suggested_target = None
     risk_reward = None
     if last_price is not None and atr_pct is not None and stance in ("long", "short"):
         atr = (atr_pct / 100.0) * last_price
+        stop_distance = 1.5 * atr
+        target_distance = stop_distance * target_r
         if stance == "long":
-            suggested_stop = last_price - 1.5 * atr
-            suggested_target = last_price + 3.0 * atr
+            suggested_stop = last_price - stop_distance
+            suggested_target = last_price + target_distance
         else:
-            suggested_stop = last_price + 1.5 * atr
-            suggested_target = last_price - 3.0 * atr
+            suggested_stop = last_price + stop_distance
+            suggested_target = last_price - target_distance
         if abs(last_price - suggested_stop) > 0:
             risk_reward = round(
                 abs(suggested_target - last_price) / abs(last_price - suggested_stop), 2

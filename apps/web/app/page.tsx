@@ -5,6 +5,7 @@ import { TokenCard } from "@/components/TokenCard";
 import { Disclaimer } from "@/components/Disclaimer";
 import { CalibrationHero } from "@/components/CalibrationHero";
 import { SectorTile } from "@/components/SectorTile";
+import { ActivityFeed } from "@/components/ActivityFeed";
 import { api, type Watchlist } from "@/lib/api";
 import { Plus, Trash2, History } from "lucide-react";
 import Link from "next/link";
@@ -89,6 +90,7 @@ export default function Home() {
       )}
       <SectorTile />
       <CalibrationHero />
+      <ActivityFeed />
       {lists.length === 0 ? (
         <EmptyState />
       ) : (

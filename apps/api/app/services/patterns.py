@@ -55,6 +55,16 @@ PatternKind = Literal[
     "piercing_line", "dark_cloud_cover",
     "tweezer_top", "tweezer_bottom",
     "abandoned_baby_bull", "abandoned_baby_bear",
+    # Senior-grade additions (detectors live in patterns_advanced.py)
+    "harmonic_gartley_bull", "harmonic_gartley_bear",
+    "harmonic_bat_bull", "harmonic_bat_bear",
+    "harmonic_butterfly_bull", "harmonic_butterfly_bear",
+    "harmonic_crab_bull", "harmonic_crab_bear",
+    "harmonic_shark_bull", "harmonic_shark_bear",
+    "harmonic_cypher_bull", "harmonic_cypher_bear",
+    "three_drives_bull", "three_drives_bear",
+    "diamond_top", "diamond_bottom",
+    "wolfe_wave_bull", "wolfe_wave_bear",
 ]
 DivergenceKind = Literal[
     "rsi_bullish_regular", "rsi_bearish_regular",
@@ -184,6 +194,19 @@ def analyze(
     patterns += _smc_order_blocks_and_fvg(df)
     patterns += _liquidity_sweeps_and_equal_levels(df, swings)
     patterns += _candlesticks(df)
+
+    # Senior-grade detectors: harmonics (Gartley/Bat/Butterfly/Crab/Shark/
+    # Cypher), Three Drives, Diamond, Wolfe Wave. Lazy-imported so the basic
+    # analyze() path still has zero new dependencies if the advanced module
+    # isn't present.
+    try:
+        from . import patterns_advanced  # noqa: WPS433
+        patterns += patterns_advanced.detect_all_advanced(df, swings)
+        # Post-process: boost confidence on volume-confirmed breakouts.
+        patterns = patterns_advanced.boost_with_volume_confirmation(df, patterns)
+    except Exception:
+        # Never break the basic path if the advanced module errors.
+        pass
 
     divergences = _divergences(df, swings)
 

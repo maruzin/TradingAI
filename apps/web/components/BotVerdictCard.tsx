@@ -46,7 +46,15 @@ export function BotVerdictCard({ symbol }: { symbol: string }) {
     <section className="card space-y-3">
       <header className="flex items-baseline justify-between gap-2">
         <h2 className="font-medium">Trading bot verdict</h2>
-        <span className="text-[10px] text-ink-soft">decided {d.decided_at}</span>
+        <div className="flex items-baseline gap-3">
+          <a
+            href={`/decisions/${symbol.toLowerCase()}`}
+            className="text-[11px] text-accent underline-offset-2 hover:underline"
+          >
+            view decision trace →
+          </a>
+          <span className="text-[10px] text-ink-soft">decided {d.decided_at}</span>
+        </div>
       </header>
 
       <div className={clsx("rounded-md border p-3 flex flex-wrap items-center gap-3", cls)}>

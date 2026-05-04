@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__
 from .logging_setup import configure_logging, get_logger
 from .routes import (
+    activity,
     admin_health,
     alerts,
     auth,
@@ -23,6 +24,7 @@ from .routes import (
     gossip,
     health,
     markets,
+    me,
     picks,
     portfolio,
     regime,
@@ -117,6 +119,8 @@ def create_app() -> FastAPI:
     app.include_router(regime.router, prefix="/api/regime", tags=["regime"])
     app.include_router(admin_health.router, prefix="/api/admin/health", tags=["admin"])
     app.include_router(bot.router, prefix="/api/bot", tags=["bot"])
+    app.include_router(me.router, prefix="/api/me", tags=["me"])
+    app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
     app.include_router(correlation.router, prefix="/api/correlation", tags=["correlation"])
     app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
     app.include_router(ev.router, prefix="/api/ev", tags=["ev"])

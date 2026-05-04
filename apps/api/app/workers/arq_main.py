@@ -35,6 +35,7 @@ from . import (
     ta_snapshotter,
     thesis_tracker,
     wallet_poller,
+    weight_tuner,
 )
 
 
@@ -71,6 +72,8 @@ class WorkerSettings:
         cron(backtest_evaluator.run,  hour={1}, minute={0}),
         # Weekly retrain — Sunday 02:00 UTC.
         cron(predictor_trainer.run,   weekday={"sun"}, hour={2}, minute={0}),
+        # Weekly weight tuning — Sunday 03:00 UTC, after the trainer cycle.
+        cron(weight_tuner.run,        weekday={"sun"}, hour={3}, minute={0}),
     ]
     on_startup = startup
     on_shutdown = shutdown
