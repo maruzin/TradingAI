@@ -4,9 +4,22 @@ GET   /api/me/profile          → user's risk profile (returns defaults if
                                  nothing set yet)
 PATCH /api/me/profile          → partial update of any subset of risk knobs
 
-The defaults are sensible enough that anonymous callers (no auth) can
-hit GET /me/profile to see what knobs exist — they get the global default
-profile as a hint, never another user's data.
+Response shape:
+  {
+    ...profile fields...
+    is_authenticated: bool,   # true iff a valid Supabase JWT was on the request
+    is_default: bool,         # true iff the values shown are the built-in
+                              # defaults (either anonymous, or DB lookup failed
+                              # — see db_unavailable)
+    db_unavailable: bool,     # true iff we're authed but couldn't reach the DB
+                              # (typical cause: migration 014 hasn't been run
+                              # against this Supabase project yet — re-run
+                              # SUPABASE_BUNDLE.sql to fix).
+  }
+
+Anonymous callers see defaults but the UI must NOT prompt for sign-in if
+``is_authenticated=true``; if the DB is unavailable the UI should show a
+specific "database not ready" message rather than "sign in to save".
 """
 from __future__ import annotations
 
@@ -45,15 +58,29 @@ class RiskProfilePatch(BaseModel):
 async def get_profile(
     user: Annotated[CurrentUser | None, Depends(get_optional_user)] = None,
 ) -> dict:
-    """Returns the user's risk profile. Anonymous → built-in defaults."""
     if user is None:
-        return {**default_profile(), "is_default": True}
+        return {
+            **default_profile(),
+            "is_authenticated": False,
+            "is_default": True,
+            "db_unavailable": False,
+        }
     try:
         profile = await get_for_user(user.id)
-        return {**profile, "is_default": False}
+        return {
+            **profile,
+            "is_authenticated": True,
+            "is_default": False,
+            "db_unavailable": False,
+        }
     except Exception as e:
-        log.warning("me.profile_get_failed", error=str(e))
-        return {**default_profile(), "is_default": True}
+        log.warning("me.profile_get_failed", user_id=user.id, error=str(e))
+        return {
+            **default_profile(),
+            "is_authenticated": True,
+            "is_default": True,
+            "db_unavailable": True,
+        }
 
 
 @router.patch("/profile")
@@ -71,10 +98,22 @@ async def patch_profile(
         updated = await upsert(user.id, payload)
     except Exception as e:
         log.warning("me.profile_patch_failed", user_id=user.id, error=str(e))
-        raise HTTPException(503, detail="profile store unavailable") from e
+        raise HTTPException(
+            503,
+            detail=(
+                "Couldn't save your profile — the risk-profile columns are missing "
+                "from the database. Re-run SUPABASE_BUNDLE.sql in the Supabase SQL "
+                "editor (it's idempotent and safe to re-apply)."
+            ),
+        ) from e
 
     await audit_repo.write(
         user_id=user.id, actor="user", action="profile.update",
         target="risk_profile", args=payload,
     )
-    return {**updated, "is_default": False}
+    return {
+        **updated,
+        "is_authenticated": True,
+        "is_default": False,
+        "db_unavailable": False,
+    }

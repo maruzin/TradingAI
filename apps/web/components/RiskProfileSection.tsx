@@ -53,15 +53,22 @@ export function RiskProfileSection() {
       <div className="card text-sm">
         <h2 className="font-medium">Risk profile</h2>
         <p className="text-ink-muted text-xs mt-1">
-          Sign in to set your risk profile. The bot uses it to filter signals,
-          size stops/targets, and re-tilt scoring weights toward the strategy
-          that fits how you trade.
+          Couldn&apos;t reach the profile API. Check the backend health page or try again.
         </p>
       </div>
     );
   }
 
-  const isAnonymous = q.data.is_default;
+  // Three distinct states the section can be in:
+  //   - anonymous (no JWT)         → show "sign in to save", knobs disabled
+  //   - authed but DB-unavailable  → show "DB not ready" with the migration
+  //                                   hint, knobs disabled (can't save)
+  //   - authed + DB available      → fully editable
+  const isAuthenticated = q.data.is_authenticated === true;
+  const dbUnavailable = q.data.db_unavailable === true;
+  const editable = isAuthenticated && !dbUnavailable;
+  const disabled = !editable;
+
   const update = (patch: Partial<RiskProfile>) => {
     setDraft({ ...draft, ...patch });
     m.mutate(patch);
@@ -69,7 +76,7 @@ export function RiskProfileSection() {
 
   return (
     <section className="card space-y-5">
-      <header className="flex items-baseline justify-between gap-2">
+      <header className="flex items-baseline justify-between gap-2 flex-wrap">
         <div>
           <h2 className="font-medium">Risk profile</h2>
           <p className="text-xs text-ink-muted">
@@ -79,10 +86,24 @@ export function RiskProfileSection() {
         </div>
         {m.isPending && <span className="text-xs text-ink-soft">saving…</span>}
         {m.isError && <span className="text-xs text-bear">save failed</span>}
-        {isAnonymous && (
-          <span className="chip chip-warn text-[11px]">defaults shown — sign in to save</span>
+        {!isAuthenticated && (
+          <span className="chip chip-warn text-[11px]">sign in to save your profile</span>
+        )}
+        {isAuthenticated && dbUnavailable && (
+          <span className="chip chip-warn text-[11px]">database not ready — see note below</span>
         )}
       </header>
+
+      {isAuthenticated && dbUnavailable && (
+        <div className="rounded-md border border-warn/40 bg-warn/5 p-3 text-xs">
+          <p className="font-medium text-warn">Risk-profile columns missing in the database.</p>
+          <p className="text-ink-muted mt-1">
+            The risk-profile feature added new columns (migration <code>014_user_risk_profile.sql</code>).
+            Re-run <code>SUPABASE_BUNDLE.sql</code> in your Supabase SQL Editor to add them — the bundle
+            is idempotent so it&apos;s safe to re-apply on top of your existing schema.
+          </p>
+        </div>
+      )}
 
       {/* Strategy persona */}
       <div>
@@ -96,13 +117,13 @@ export function RiskProfileSection() {
               <button
                 key={p.id}
                 onClick={() => update({ strategy_persona: p.id })}
-                disabled={isAnonymous}
+                disabled={disabled}
                 className={clsx(
                   "rounded-md border px-3 py-2 text-left text-sm transition-colors",
                   active
                     ? "border-accent/60 bg-accent/10 text-ink"
                     : "border-line text-ink-muted hover:border-accent/40",
-                  isAnonymous && "opacity-50 cursor-not-allowed",
+                  disabled && "opacity-50 cursor-not-allowed",
                 )}
               >
                 <div className="font-medium">{p.label}</div>
@@ -125,13 +146,13 @@ export function RiskProfileSection() {
               <button
                 key={h.id}
                 onClick={() => update({ time_horizon: h.id })}
-                disabled={isAnonymous}
+                disabled={disabled}
                 className={clsx(
                   "rounded-md border px-3 py-2 text-sm",
                   active
                     ? "border-accent/60 bg-accent/10 text-ink"
                     : "border-line text-ink-muted hover:border-accent/40",
-                  isAnonymous && "opacity-50 cursor-not-allowed",
+                  disabled && "opacity-50 cursor-not-allowed",
                 )}
               >
                 <div className="font-medium">{h.label}</div>
@@ -149,7 +170,7 @@ export function RiskProfileSection() {
           unit="% of bankroll"
           value={draft.risk_per_trade_pct}
           min={0.5} max={5} step={0.5}
-          disabled={isAnonymous}
+          disabled={disabled}
           onCommit={(v) => update({ risk_per_trade_pct: v })}
           help="Drives stop-distance sizing. 1% = conservative; 5% = aggressive."
         />
@@ -158,7 +179,7 @@ export function RiskProfileSection() {
           unit="× R"
           value={draft.target_r_multiple}
           min={1} max={5} step={0.25}
-          disabled={isAnonymous}
+          disabled={disabled}
           onCommit={(v) => update({ target_r_multiple: v })}
           help="2.0 = take profit at 2× the stop distance."
         />
@@ -168,7 +189,7 @@ export function RiskProfileSection() {
           value={draft.min_confidence}
           min={0.4} max={0.9} step={0.05}
           format={(v) => `${(v * 100).toFixed(0)}%`}
-          disabled={isAnonymous}
+          disabled={disabled}
           onCommit={(v) => update({ min_confidence: v })}
           help="Bot calls below this become 'watch' instead of 'long'/'short'."
         />
@@ -178,7 +199,7 @@ export function RiskProfileSection() {
           value={draft.max_open_trades}
           min={1} max={20} step={1}
           format={(v) => `${v}`}
-          disabled={isAnonymous}
+          disabled={disabled}
           onCommit={(v) => update({ max_open_trades: Math.round(v) })}
           help="Caps how many concurrent suggestions the picks page surfaces."
         />

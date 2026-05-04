@@ -20,6 +20,25 @@ export const TF_OPTIONS: { code: TFCode; label: string }[] = [
   { code: "M", label: "1M" },
 ];
 
+/**
+ * Default visible range per timeframe. The TradingView widget honors a top-level
+ * `range` param that, if hardcoded, will OVERRIDE the chosen interval (it forces
+ * the chart to show e.g. 12 months of data, which then up-samples 1-min candles
+ * to daily). Map each TF to a sensible visible window so users actually see the
+ * resolution they picked.
+ */
+const RANGE_BY_TF: Record<TFCode, string> = {
+  "1":   "1D",
+  "5":   "5D",
+  "15":  "1M",
+  "30":  "1M",
+  "60":  "3M",
+  "240": "6M",
+  "D":   "12M",
+  "W":   "60M",
+  "M":   "ALL",
+};
+
 export function TradingViewWidget({
   symbol,
   exchange = "BINANCE",
@@ -59,7 +78,7 @@ export function TradingViewWidget({
       allow_symbol_change: true,
       hide_legend: false,
       withdateranges: true,
-      range: "12M",
+      range: RANGE_BY_TF[interval] ?? "12M",
       studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"],
       support_host: "https://www.tradingview.com",
     });

@@ -383,7 +383,9 @@ export type RiskProfile = {
   strategy_persona:
     | "balanced" | "momentum" | "mean_reversion"
     | "breakout" | "wyckoff" | "ml_first";
+  is_authenticated?: boolean;
   is_default?: boolean;
+  db_unavailable?: boolean;
 };
 
 export type ActivityEvent = {
