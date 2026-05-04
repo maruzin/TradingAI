@@ -41,7 +41,14 @@ class RegimeSnapshot:
     eth_btc_ratio: float | None = None
     dxy_state: str | None = None
     dxy_value: float | None = None
-    liquidity_state: str | None = None
+    liquidity_state: str | None = None       # from FRED M2 YoY
+    liquidity_m2_yoy_pct: float | None = None
+    rates_state: str | None = None           # from FRED 10Y treasury level
+    rates_dgs10_pct: float | None = None
+    fed_funds_state: str | None = None       # from FRED effective fed funds
+    fed_funds_pct: float | None = None
+    inflation_state: str | None = None       # from FRED CPI YoY
+    inflation_cpi_yoy_pct: float | None = None
     funding_state: str | None = None
     funding_btc_pct: float | None = None
     fear_greed: int | None = None
@@ -57,7 +64,22 @@ class RegimeSnapshot:
             ("BTC dominance", self.btc_dominance_state or "—"),
             ("ETH/BTC", self.eth_btc_state or "—"),
             ("DXY", self.dxy_state or "—"),
-            ("Liquidity", self.liquidity_state or "—"),
+            ("Liquidity (M2 YoY)", (
+                f"{self.liquidity_state or '—'}"
+                + (f" ({self.liquidity_m2_yoy_pct:+.1f}%)" if self.liquidity_m2_yoy_pct is not None else "")
+            )),
+            ("Rates (10Y)", (
+                f"{self.rates_state or '—'}"
+                + (f" ({self.rates_dgs10_pct:.2f}%)" if self.rates_dgs10_pct is not None else "")
+            )),
+            ("Fed funds", (
+                f"{self.fed_funds_state or '—'}"
+                + (f" ({self.fed_funds_pct:.2f}%)" if self.fed_funds_pct is not None else "")
+            )),
+            ("Inflation (CPI YoY)", (
+                f"{self.inflation_state or '—'}"
+                + (f" ({self.inflation_cpi_yoy_pct:+.1f}%)" if self.inflation_cpi_yoy_pct is not None else "")
+            )),
             ("Funding (BTC perp)", self.funding_state or "—"),
             ("Fear & Greed", f"{self.fear_greed_label or '—'} ({self.fear_greed or '—'})"),
         ]
@@ -127,24 +149,77 @@ async def snapshot() -> RegimeSnapshot:
     except Exception:
         pass
 
-    # --- DXY + liquidity from MacroOverlay ---
+    # --- DXY + FRED-backed macro overlay ---
+    # NB: previously this block accessed `macro.fred` (no such attribute) and
+    # fell silently into the except, so liquidity_state was always None even
+    # when the FRED API key was set. The dataclass field is `indicators`,
+    # and the freshness columns on MacroIndicator are `last_value` /
+    # `pct_change_yoy`.
     try:
         async with MacroOverlay() as m:
             macro = await m.snapshot()
-            dxy = next((i for i in macro.indices if i.symbol == "DXY"), None)
+
+            # DXY (Stooq, single-day pct) — risk-on/off threshold widened a
+            # touch since pct_change_1d is noisier than the old 30d.
+            dxy = next((i for i in macro.indices if i.symbol in ("DX-Y.NYB", "DXY")), None)
             if dxy:
                 out.dxy_value = dxy.last
+                pct = dxy.pct_change_30d or dxy.pct_change_5d or dxy.pct_change_1d or 0.0
                 out.dxy_state = (
-                    "risk-off" if (dxy.pct_30d or 0) > 1.5
-                    else "risk-on" if (dxy.pct_30d or 0) < -1.5
+                    "risk-off" if pct > 1.5
+                    else "risk-on" if pct < -1.5
                     else "flat"
                 )
-            m2 = next((i for i in macro.fred if i.series_id == "M2SL"), None)
-            if m2:
+
+            indicators = {ind.series_id: ind for ind in macro.indicators}
+
+            # Liquidity proxy — M2 YoY > 3% expanding, < 0% contracting.
+            m2 = indicators.get("M2SL")
+            if m2 is not None:
+                out.liquidity_m2_yoy_pct = m2.pct_change_yoy
+                yoy = m2.pct_change_yoy or 0
                 out.liquidity_state = (
-                    "expanding" if (m2.pct_yoy or 0) > 3
-                    else "contracting" if (m2.pct_yoy or 0) < 0
+                    "expanding" if yoy > 3
+                    else "contracting" if yoy < 0
                     else "flat"
+                )
+
+            # 10y treasury — risk asset headwind when nominal yields rise hard.
+            #   high  : ≥4.5% (restrictive)
+            #   neutral: 3-4.5%
+            #   low   : <3% (accommodative)
+            dgs10 = indicators.get("DGS10")
+            if dgs10 is not None and dgs10.last_value is not None:
+                out.rates_dgs10_pct = dgs10.last_value
+                out.rates_state = (
+                    "high" if dgs10.last_value >= 4.5
+                    else "low" if dgs10.last_value < 3.0
+                    else "neutral"
+                )
+
+            # Effective Fed Funds — supports rates_state but separated since
+            # market action sometimes leads/lags the policy rate.
+            ff = indicators.get("FEDFUNDS")
+            if ff is not None and ff.last_value is not None:
+                out.fed_funds_pct = ff.last_value
+                out.fed_funds_state = (
+                    "tight" if ff.last_value >= 4.0
+                    else "easy" if ff.last_value < 2.0
+                    else "neutral"
+                )
+
+            # CPI YoY — inflation regime gates a lot of the bot's confidence.
+            #   hot     : YoY ≥ 4%
+            #   moderating: 2-4%
+            #   cool    : <2%
+            cpi = indicators.get("CPIAUCSL")
+            if cpi is not None and cpi.pct_change_yoy is not None:
+                out.inflation_cpi_yoy_pct = cpi.pct_change_yoy
+                yoy = cpi.pct_change_yoy
+                out.inflation_state = (
+                    "hot" if yoy >= 4.0
+                    else "cool" if yoy < 2.0
+                    else "moderating"
                 )
     except Exception:
         pass

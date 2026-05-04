@@ -192,6 +192,12 @@ class MacroOverlay:
     async def close(self) -> None:
         await self.client.aclose()
 
+    async def __aenter__(self) -> MacroOverlay:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     async def snapshot(self) -> MacroSnapshot:
         as_of = datetime.now(UTC).isoformat(timespec="seconds")
         indices_t, commodities_t, indicators_t = await asyncio.gather(

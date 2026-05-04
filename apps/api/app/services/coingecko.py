@@ -104,6 +104,12 @@ class CoinGeckoClient:
     async def close(self) -> None:
         await self.client.aclose()
 
+    async def __aenter__(self) -> CoinGeckoClient:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     # -- Public ---------------------------------------------------------------
     async def snapshot(self, token: str) -> TokenSnapshot:
         """Look up a token by symbol, CoinGecko id, or contract address."""

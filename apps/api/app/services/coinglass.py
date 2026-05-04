@@ -73,6 +73,12 @@ class CoinglassClient:
     async def close(self) -> None:
         await self.client.aclose()
 
+    async def __aenter__(self) -> CoinglassClient:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     async def funding_for(self, symbol: str) -> FundingBundle:
         sym = symbol.upper()
         bundle = FundingBundle(symbol=sym,

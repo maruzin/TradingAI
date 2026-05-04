@@ -88,6 +88,12 @@ class HistoricalClient:
                 pass
         self._exchanges.clear()
 
+    async def __aenter__(self) -> HistoricalClient:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
     async def fetch(self, spec: FetchSpec, *, page_limit: int = 1000) -> FetchResult:
         """Pull a full window of OHLCV for one (symbol, timeframe).
 
