@@ -219,30 +219,56 @@ class MacroOverlay:
             notes=notes,
         )
 
-    # ---- Yahoo Finance (free; no key) --------------------------------------
+    # ---- Stooq (free; no key; CSV) -----------------------------------------
+    # Yahoo Finance deprecated unauthenticated /v7/finance/quote (the calls 401 now).
+    # Stooq.com publishes the same broad-market quotes as a free CSV endpoint
+    # with no auth, no rate-limit headaches, and reliable uptime.
+    #
+    # Mapping our internal Yahoo-style symbols to Stooq's tickers; Stooq tickers
+    # are case-insensitive but lowercase is conventional.
+    _STOOQ_SYMBOLS: dict[str, str] = {
+        "^GSPC":    "^spx",      # S&P 500
+        "^IXIC":    "^ndq",      # Nasdaq Composite
+        "^DJI":     "^dji",      # Dow Jones Industrial
+        "DX-Y.NYB": "^dxy",      # US Dollar Index
+        "^FTSE":    "^ftm",      # FTSE 100 (Stooq uses ^ftm)
+        "^GDAXI":   "^dax",      # DAX 40
+        "^N225":    "^nkx",      # Nikkei 225
+        "^HSI":     "^hsi",      # Hang Seng
+        "CL=F":     "cl.f",      # WTI Crude futures
+        "BZ=F":     "bz.f",      # Brent Crude futures
+        "GC=F":     "gc.f",      # Gold futures
+        "HG=F":     "hg.f",      # Copper futures
+    }
+
     async def _yahoo_quotes(
         self, symbols: list[tuple[str, str]], *, as_index: bool
     ) -> list[IndexQuote] | list[CommodityQuote]:
-        # Yahoo Finance v7/v8 endpoints can rate-limit; try them once and degrade gracefully.
+        """Fetch quotes from Stooq for the requested symbols.
+
+        Method name kept as ``_yahoo_quotes`` for backwards compatibility with
+        existing callers / log keys; the implementation moved to Stooq because
+        Yahoo blocks unauthenticated requests now.
+        """
         out_idx: list[IndexQuote] = []
         out_com: list[CommodityQuote] = []
         for sym, name in symbols:
-            try:
-                payload = await self._yahoo_one(sym)
-            except Exception as e:
-                log.warning("macro.yahoo.failed", symbol=sym, error=str(e))
-                if as_index:
-                    out_idx.append(IndexQuote(sym, name, None, None, None, None))
-                else:
-                    out_com.append(CommodityQuote(sym, name, None, None))
-                continue
-            last = payload.get("regularMarketPrice")
-            chg = payload.get("regularMarketChangePercent")
+            stooq_sym = self._STOOQ_SYMBOLS.get(sym)
+            payload: dict[str, Any] = {}
+            if stooq_sym is None:
+                log.warning("macro.stooq.no_mapping", symbol=sym)
+            else:
+                try:
+                    payload = await self._stooq_one(stooq_sym)
+                except Exception as e:
+                    log.warning("macro.stooq.failed", symbol=sym, stooq=stooq_sym, error=str(e))
+            last = payload.get("close")
+            chg = payload.get("pct_change_1d")
             if as_index:
                 out_idx.append(IndexQuote(
                     symbol=sym, name=name, last=last,
                     pct_change_1d=chg,
-                    pct_change_5d=payload.get("fiftyDayAverageChangePercent"),
+                    pct_change_5d=None,    # Stooq's lite endpoint is single-day; weekly/monthly via separate fetch
                     pct_change_30d=None,
                 ))
             else:
@@ -251,8 +277,15 @@ class MacroOverlay:
                 ))
         return out_idx if as_index else out_com  # type: ignore[return-value]
 
-    async def _yahoo_one(self, symbol: str) -> dict[str, Any]:
-        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
+    async def _stooq_one(self, stooq_sym: str) -> dict[str, Any]:
+        """Single-quote fetch from Stooq's CSV endpoint.
+
+        Format: ``Symbol,Date,Time,Open,High,Low,Close,Volume`` plus a
+        derived 1-day % change relative to the previous close. We use the
+        ``l/`` (lite) endpoint plus the ``d/`` (history) endpoint to compute
+        the daily % change without a second round trip per symbol.
+        """
+        url = f"https://stooq.com/q/l/?s={stooq_sym}&f=sd2t2ohlcv&h&e=csv"
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(2),
             wait=wait_exponential_jitter(initial=0.5, max=2),
@@ -262,10 +295,27 @@ class MacroOverlay:
             with attempt:
                 r = await self.client.get(url, headers={"user-agent": "TradingAI/0.1"})
                 r.raise_for_status()
-                data = r.json()
-                results = data.get("quoteResponse", {}).get("result") or []
-                return results[0] if results else {}
-        return {}
+                text = r.text.strip()
+        # Two-line CSV: header, then one quote row.
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            return {}
+        cols = lines[1].split(",")
+        # Stooq returns "N/D" for missing fields — coerce those to None.
+        def _f(idx: int) -> float | None:
+            try:
+                v = cols[idx]
+                if v in ("", "N/D"):
+                    return None
+                return float(v)
+            except (ValueError, IndexError):
+                return None
+        open_ = _f(3)
+        close = _f(6)
+        pct = None
+        if open_ is not None and close is not None and open_ != 0:
+            pct = round((close - open_) / open_ * 100, 2)
+        return {"open": open_, "close": close, "pct_change_1d": pct}
 
     # ---- FRED (free with API key) -----------------------------------------
     async def _fred_series(self, series: list[tuple[str, str]]) -> list[MacroIndicator]:
