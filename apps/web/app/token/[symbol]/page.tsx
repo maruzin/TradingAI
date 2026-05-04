@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import nextDynamic from "next/dynamic";
-import { api } from "@/lib/api";
+import { api, type TokenSnapshot, type TokenBrief, type Source } from "@/lib/api";
 import { fmtUsd, fmtPct, pctClass } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
@@ -248,7 +248,7 @@ function Header({
   symbol,
   horizon,
 }: {
-  snapshot: any;
+  snapshot: TokenSnapshot | null | undefined;
   symbol: string;
   horizon: string;
 }) {
@@ -284,7 +284,7 @@ function Header({
   );
 }
 
-function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
+function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<TokenBrief>> }) {
   const [stageIdx, setStageIdx] = useState(0);
 
   // Cycle through the stage messages while the brief is loading so the user
@@ -400,7 +400,7 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
         <section className="card">
           <h2 className="font-medium">Sources ({(data.sources ?? []).length})</h2>
           <ol className="mt-2 space-y-1 text-sm list-decimal pl-5">
-            {(data.sources ?? []).map((s: any, i: number) => (
+            {(data.sources ?? []).map((s: Source, i: number) => (
               <li key={i}>
                 <a
                   href={s.url}
