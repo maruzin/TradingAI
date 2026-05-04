@@ -306,6 +306,10 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
         <Markdown>{data.markdown}</Markdown>
       </article>
 
+      <ForecastCard symbol={data.token_symbol} horizon={data.horizon} />
+
+      <CVDPanel symbol={data.token_symbol} />
+
       <BriefDiffPanel symbol={data.token_symbol} horizon={data.horizon} />
 
       {(data.sources ?? []).length > 0 && (
@@ -331,6 +335,153 @@ function BriefSection({ brief }: { brief: ReturnType<typeof useQuery<any>> }) {
         </section>
       )}
     </>
+  );
+}
+
+function ForecastCard({
+  symbol,
+  horizon,
+}: {
+  symbol: string;
+  horizon: "swing" | "position" | "long";
+}) {
+  const q = useQuery({
+    queryKey: ["forecast", symbol, horizon],
+    queryFn: () => api.forecast(symbol, horizon),
+    retry: false,
+    refetchOnMount: false,
+  });
+  if (q.isLoading) return null;
+  if (q.error) return null;
+  const f = q.data;
+  if (!f) return null;
+  const dirClass =
+    f.direction === "long" ? "text-bull border-bull/40 bg-bull/10" :
+    f.direction === "short" ? "text-bear border-bear/40 bg-bear/10" :
+    "text-ink-muted border-line";
+  return (
+    <section className="card space-y-3">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium">ML probabilistic forecast</h2>
+        <span className="text-[10px] text-ink-soft">
+          {f.features_used} features · v{f.model_version.slice(0, 10)}
+        </span>
+      </header>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`chip border text-xs ${dirClass}`}>
+          {f.direction.toUpperCase()}
+        </span>
+        <ProbBar label="↑ ≥1×ATR" value={f.p_up} tone="bull" />
+        <ProbBar label="↓ ≥1×ATR" value={f.p_down} tone="bear" />
+      </div>
+      <p className="text-[11px] text-ink-muted">
+        Probability the price will move at least 1× ATR within the {horizon} horizon.
+        Treat as one input — calibration metrics on{" "}
+        <a href="/track-record" className="text-accent underline">track record</a>.
+      </p>
+      {f.notes.length > 0 && (
+        <ul className="text-[10px] text-ink-soft list-disc pl-4">
+          {f.notes.map((n, i) => <li key={i}>{n}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ProbBar({
+  label, value, tone,
+}: {
+  label: string;
+  value: number;
+  tone: "bull" | "bear";
+}) {
+  const pct = Math.max(0, Math.min(1, value)) * 100;
+  const barColor = tone === "bull" ? "bg-bull" : "bg-bear";
+  const textColor = tone === "bull" ? "text-bull" : "text-bear";
+  return (
+    <div className="flex-1 min-w-[140px]">
+      <div className="flex justify-between text-[10px] text-ink-muted">
+        <span>{label}</span>
+        <span className={`tabular-nums ${textColor}`}>{pct.toFixed(0)}%</span>
+      </div>
+      <div className="mt-1 h-1.5 rounded bg-bg-subtle overflow-hidden">
+        <div className={`h-1.5 ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CVDPanel({ symbol }: { symbol: string }) {
+  const q = useQuery({
+    queryKey: ["cvd", symbol],
+    queryFn: () => api.cvd(symbol, { bucket_seconds: 60, lookback_minutes: 60 }),
+    retry: false,
+    refetchInterval: 60_000,
+    refetchOnMount: false,
+  });
+  if (q.isLoading) return null;
+  if (q.error) return null;
+  const c = q.data;
+  if (!c) return null;
+  const isLive = c.points && c.points.length > 0;
+  return (
+    <section className="card space-y-2">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium">Order flow (CVD)</h2>
+        <span className="text-[10px] text-ink-soft">
+          {isLive
+            ? `last ${c.points.length} bars · ${c.bucket_seconds}s buckets · ${c.source}`
+            : "stream offline"}
+        </span>
+      </header>
+      {!isLive && (
+        <p className="text-xs text-ink-muted">
+          {(c.notes && c.notes[0]) || "Run the cvd_streamer worker to see live order flow."}
+        </p>
+      )}
+      {isLive && (
+        <>
+          <div className="flex items-center gap-2 text-xs">
+            <span className={c.delta >= 0 ? "text-bull" : "text-bear"}>
+              Δ {c.delta.toFixed(2)}
+            </span>
+            <span className="text-ink-muted">
+              buy/sell {c.ratio_pct.toFixed(0)}% / {(100 - c.ratio_pct).toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-2 rounded bg-bg-subtle overflow-hidden flex">
+            <div className="bg-bull h-2" style={{ width: `${c.ratio_pct}%` }} />
+            <div className="bg-bear h-2" style={{ width: `${100 - c.ratio_pct}%` }} />
+          </div>
+          <CVDSparkline points={c.points} />
+          <p className="text-[10px] text-ink-soft">
+            Price + CVD divergence is a leading signal. Price up + CVD flat = rally on
+            short-covering, not real buying.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function CVDSparkline({ points }: { points: { cvd: number; last_price: number }[] }) {
+  if (points.length < 2) return null;
+  const cvds = points.map((p) => p.cvd);
+  const cvdMin = Math.min(...cvds);
+  const cvdMax = Math.max(...cvds);
+  const cvdRng = Math.max(0.0001, cvdMax - cvdMin);
+  const w = 600;
+  const h = 60;
+  const step = w / Math.max(1, points.length - 1);
+  const path = points.map((p, i) => {
+    const x = i * step;
+    const y = h - ((p.cvd - cvdMin) / cvdRng) * h;
+    return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-12 mt-1" aria-label="CVD line">
+      <path d={path} stroke="currentColor" className="text-accent" fill="none" strokeWidth={1.5} />
+    </svg>
   );
 }
 

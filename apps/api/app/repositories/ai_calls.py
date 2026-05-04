@@ -73,6 +73,79 @@ async def record_outcome(call_id: str, outcome: str, meta: dict[str, Any]) -> No
     )
 
 
+async def detailed_track_record(*, since_days: int = 90) -> dict[str, Any]:
+    """Calibration metrics for the homepage hero.
+
+    Returns Brier score, log-loss, hit rate per call_type, plus a
+    breakdown by stated-confidence bucket so the user can SEE calibration
+    on a curve.
+
+    Brier: Σ(p - outcome)² / N — lower is better, perfect = 0, dart-throw = 0.25.
+    Log-loss: −Σ(o·log p + (1−o)·log(1−p)) / N — measures probabilistic skill.
+    """
+    import math
+    cutoff_secs = datetime.now(timezone.utc).timestamp() - since_days * 86400
+    rows = await db.fetch(
+        """
+        select call_type, confidence, outcome, claim
+          from ai_calls
+         where created_at > to_timestamp($1)
+           and outcome is not null
+           and confidence is not null
+        """,
+        cutoff_secs,
+    )
+    by_type: dict[str, dict[str, Any]] = {}
+    bins = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.001]
+    bin_data: dict[str, list[dict[str, float]]] = {}
+
+    for r in rows:
+        ct = r["call_type"]
+        conf = float(r["confidence"] or 0)
+        outcome = 1.0 if r["outcome"] == "correct" else 0.0
+        d = by_type.setdefault(ct, {
+            "n": 0, "n_correct": 0, "sum_brier": 0.0, "sum_logloss": 0.0,
+            "sum_conf": 0.0,
+        })
+        d["n"] += 1
+        d["n_correct"] += int(outcome)
+        d["sum_brier"] += (conf - outcome) ** 2
+        # Clamp probabilities for log-loss stability.
+        p = min(max(conf, 1e-6), 1 - 1e-6)
+        d["sum_logloss"] += -(outcome * math.log(p) + (1 - outcome) * math.log(1 - p))
+        d["sum_conf"] += conf
+        bd = bin_data.setdefault(ct, [])
+        for i in range(len(bins) - 1):
+            if bins[i] <= conf < bins[i + 1]:
+                while len(bd) <= i:
+                    bd.append({"lo": bins[len(bd)], "hi": bins[len(bd) + 1] if len(bd) + 1 < len(bins) else 1.0,
+                               "n": 0, "correct": 0})
+                bd[i]["n"] += 1
+                bd[i]["correct"] += int(outcome)
+                break
+
+    out: dict[str, Any] = {}
+    for ct, d in by_type.items():
+        n = d["n"]
+        out[ct] = {
+            "n_evaluated": n,
+            "n_correct": d["n_correct"],
+            "accuracy": (d["n_correct"] / n) if n else None,
+            "avg_confidence": (d["sum_conf"] / n) if n else None,
+            "brier": (d["sum_brier"] / n) if n else None,
+            "log_loss": (d["sum_logloss"] / n) if n else None,
+            "calibration_bins": [
+                {
+                    "bucket": f"{int(b['lo']*100)}-{int(b['hi']*100)}%",
+                    "n": b["n"],
+                    "accuracy": (b["correct"] / b["n"]) if b["n"] else None,
+                }
+                for b in bin_data.get(ct, []) if b["n"] > 0
+            ],
+        }
+    return out
+
+
 async def track_record_summary(*, since_days: int = 90) -> dict[str, Any]:
     """Top-line track-record metrics for the dashboard endpoint."""
     cutoff = datetime.now(timezone.utc).timestamp() - since_days * 86400

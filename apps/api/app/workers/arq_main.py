@@ -28,6 +28,7 @@ from . import (
     daily_morning,
     daily_picks,
     gossip_poller,
+    predictor_trainer,
     price_poller,
     setup_watcher,
     thesis_tracker,
@@ -58,6 +59,8 @@ class WorkerSettings:
         cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks
         cron(daily_picks.cron_run,    hour={7}, minute={0}),
         cron(backtest_evaluator.run,  hour={1}, minute={0}),
+        # Weekly retrain — Sunday 02:00 UTC.
+        cron(predictor_trainer.run,   weekday={"sun"}, hour={2}, minute={0}),
     ]
     on_startup = startup
     on_shutdown = shutdown

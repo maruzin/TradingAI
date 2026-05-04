@@ -21,6 +21,8 @@ from ..repositories import audit as audit_repo
 from ..repositories import briefs as brief_repo
 from ..repositories import rag as rag_repo
 from ..services.coingecko import CoinGeckoClient
+from ..services.cvd import compute_cvd
+from ..services.predictor import forecast as predictor_forecast
 from ..services.rate_limit import RateLimitExceeded, enforce as enforce_rate_limit
 
 router = APIRouter()
@@ -239,6 +241,47 @@ async def get_projection(
         },
     )
     return proj.as_response()
+
+
+@router.get("/{symbol}/forecast")
+async def get_forecast(
+    symbol: str,
+    horizon: str = Query("position", pattern="^(swing|position|long)$"),
+) -> dict:
+    """LightGBM probabilistic forecast for the latest bar.
+
+    Returns 404 if no model has been trained yet for this (token, horizon).
+    Public — no auth required; the forecast is cheap once the model is on disk.
+    """
+    pair = f"{symbol.upper()}/USDT" if "/" not in symbol else symbol.upper()
+    f = await predictor_forecast(pair, horizon=horizon)
+    if f is None:
+        raise HTTPException(
+            404,
+            detail="no model trained — wait for the weekly trainer cycle "
+                   "or run `python -m app.workers.predictor_trainer` manually",
+        )
+    return f.as_dict()
+
+
+@router.get("/{symbol}/cvd")
+async def get_cvd(
+    symbol: str,
+    bucket_seconds: int = Query(60, ge=10, le=3600),
+    lookback_minutes: int = Query(60, ge=5, le=240),
+) -> dict:
+    """Cumulative Volume Delta over a recent window.
+
+    Reads the Binance trade stream from Redis Streams. Returns an empty
+    snapshot with notes if the streamer worker isn't running.
+    """
+    binance_pair = f"{symbol.upper()}USDT" if "/" not in symbol else symbol.upper().replace("/", "")
+    snap = await compute_cvd(
+        binance_pair,
+        bucket_seconds=bucket_seconds,
+        lookback_minutes=lookback_minutes,
+    )
+    return snap.as_dict()
 
 
 def _snapshot_dict(snap) -> dict:

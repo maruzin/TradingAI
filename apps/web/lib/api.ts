@@ -321,6 +321,69 @@ export type PortfolioRisk = {
   notes: string[];
 };
 
+export type TokenForecast = {
+  symbol: string;
+  horizon: "swing" | "position" | "long";
+  p_up: number;
+  p_down: number;
+  direction: "long" | "short" | "neutral";
+  confidence: number;
+  target_pct: number | null;
+  invalidation_pct: number | null;
+  model_version: string;
+  as_of_utc: string;
+  features_used: number;
+  notes: string[];
+};
+
+export type CVDPoint = {
+  ts: string;
+  cvd: number;
+  buy_qty: number;
+  sell_qty: number;
+  last_price: number;
+};
+
+export type CVDSnapshot = {
+  symbol: string;
+  bucket_seconds: number;
+  points: CVDPoint[];
+  total_buy: number;
+  total_sell: number;
+  delta: number;
+  ratio_pct: number;
+  notes: string[];
+  source: string;
+};
+
+export type EVRow = {
+  setup: string;
+  direction: "long" | "short";
+  sample_size: number;
+  hit_rate: number;
+  median_r: number;
+  median_bars_to_target: number | null;
+  notes: string;
+};
+
+export type EVTable = {
+  pair: string;
+  timeframe: string;
+  years: number;
+  rows: EVRow[];
+  computed_at: string;
+};
+
+export type DetailedTrackEntry = {
+  n_evaluated: number;
+  n_correct: number;
+  accuracy: number | null;
+  avg_confidence: number | null;
+  brier: number | null;
+  log_loss: number | null;
+  calibration_bins: { bucket: string; n: number; accuracy: number | null }[];
+};
+
 export type BriefDiff = {
   latest: TokenBrief & { id?: string };
   previous: (TokenBrief & { id?: string }) | null;
@@ -495,6 +558,22 @@ export const api = {
     }),
   briefDiff: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>
     jsonFetch<BriefDiff>(`/tokens/${encodeURIComponent(symbol)}/brief/diff?horizon=${horizon}`),
+
+  // ML predictor + CVD + EV table + detailed track record
+  forecast: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>
+    jsonFetch<TokenForecast>(`/tokens/${encodeURIComponent(symbol)}/forecast?horizon=${horizon}`),
+  cvd: (symbol: string, opts?: { bucket_seconds?: number; lookback_minutes?: number }) => {
+    const qs = new URLSearchParams();
+    if (opts?.bucket_seconds) qs.set("bucket_seconds", String(opts.bucket_seconds));
+    if (opts?.lookback_minutes) qs.set("lookback_minutes", String(opts.lookback_minutes));
+    return jsonFetch<CVDSnapshot>(`/tokens/${encodeURIComponent(symbol)}/cvd${qs.toString() ? `?${qs}` : ""}`);
+  },
+  evTable: (pair = "BTC/USDT", years = 4) =>
+    jsonFetch<EVTable>(`/ev?pair=${encodeURIComponent(pair)}&years=${years}`),
+  trackRecordDetailed: (since_days = 90) =>
+    jsonFetch<{ since_days: number; by_call_type: Record<string, DetailedTrackEntry> }>(
+      `/track-record/detailed?since_days=${since_days}`,
+    ),
 
   // signals
   signals: (params?: { symbols?: string[]; timeframe?: "1h" | "4h" | "1d"; years?: number }) => {

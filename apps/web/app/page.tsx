@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { TokenCard } from "@/components/TokenCard";
 import { Disclaimer } from "@/components/Disclaimer";
+import { CalibrationHero } from "@/components/CalibrationHero";
 import { api, type Watchlist } from "@/lib/api";
 import { Plus, Trash2 } from "lucide-react";
 import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
@@ -74,6 +75,7 @@ export default function Home() {
   const lists = wl.data ?? [];
   return (
     <div className="space-y-8">
+      <CalibrationHero />
       {lists.length === 0 ? (
         <EmptyState />
       ) : (
