@@ -8,11 +8,12 @@ primary_region = "lhr"
   PORT = "8080"
   ENVIRONMENT = "production"
 
-# Two process groups: HTTP API and the Arq cron worker.
-# Each runs on its own Fly machine (~$2/mo each for 256MB shared).
+# Three process groups: HTTP API, Arq cron worker, Telegram long-poll bot.
+# Each runs on its own Fly machine.
 [processes]
   app    = "uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips '*'"
   worker = "uv run arq app.workers.arq_main.WorkerSettings"
+  bot    = "uv run python -m app.notifications.telegram"
 
 [http_service]
   internal_port = 8080
@@ -28,16 +29,23 @@ primary_region = "lhr"
     timeout = "5s"
     path = "/healthz"
 
-# HTTP machine (the API)
+# HTTP machine (the API) — needs a bit more RAM for the LLM brief work
 [[vm]]
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
   processes = ["app"]
 
-# Worker machine (Arq cron). Smaller is fine — workers don't serve HTTP.
+# Worker machine (Arq cron) — small is fine, doesn't serve HTTP
 [[vm]]
   memory = "256mb"
   cpu_kind = "shared"
   cpus = 1
   processes = ["worker"]
+
+# Bot machine (Telegram long-poll) — tiny, just holds an HTTPS connection
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["bot"]

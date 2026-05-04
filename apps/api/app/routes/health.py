@@ -1,4 +1,4 @@
-"""Health & readiness endpoints."""
+"""Health, readiness, and root info endpoints."""
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -7,6 +7,28 @@ from .. import __version__
 from ..settings import get_settings
 
 router = APIRouter(tags=["health"])
+
+
+@router.get("/")
+async def root() -> dict[str, object]:
+    """Friendly landing for the bare API URL — points users at the real client."""
+    return {
+        "name": "TradingAI API",
+        "version": __version__,
+        "status": "ok",
+        "docs": "API endpoints are under /api/*. The user-facing UI lives at the frontend deployment.",
+        "endpoints": {
+            "health": "/healthz",
+            "readiness": "/readyz",
+            "tokens": "/api/tokens/{symbol}/snapshot",
+            "markets": "/api/markets",
+            "signals": "/api/signals",
+            "picks": "/api/picks/today",
+            "gossip": "/api/gossip",
+            "backtest": "/api/backtest/strategies",
+        },
+        "note": "Not investment advice. This is the backend API for TradingAI.",
+    }
 
 
 @router.get("/healthz")
