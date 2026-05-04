@@ -23,11 +23,21 @@ export default function PicksPage() {
     queryKey: ["picks-today"],
     queryFn: () => api.picksToday(),
     retry: 0,
+    // While the worker is running, the backend returns status='running'
+    // and the run is in flight. Poll every 15s so the UI updates as soon
+    // as it completes — no manual refresh needed.
+    refetchInterval: (query) => {
+      const status = (query.state.data as { status?: string } | undefined)?.status;
+      return status === "running" ? 15_000 : false;
+    },
   });
   const runNow = useMutation({
     mutationFn: () => api.picksRunNow(),
     onSuccess: () => q.refetch(),
   });
+
+  const isRunning = q.data?.status === "running";
+  const isCompleted = q.data?.status === "completed";
 
   return (
     <div className="space-y-5">
@@ -35,25 +45,44 @@ export default function PicksPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Daily Top-10</h1>
           <p className="text-sm text-ink-muted">
-            Composite-scored long/short candidates picked from the universe each
-            morning at 07:00 UTC. Each pick has an ATR-based stop and target, plus a
-            full 5-dimension brief on demand.
+            Composite-scored long/short candidates from the universe. Auto-runs
+            on first visit each day (also on a 07:00 UTC cron). Each pick has
+            an ATR-based stop and target, plus a full 5-dimension brief.
           </p>
         </div>
         <button
           onClick={() => runNow.mutate()}
-          disabled={runNow.isPending}
+          disabled={runNow.isPending || isRunning}
           className="rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-sm hover:bg-accent/20 disabled:opacity-50"
         >
-          {runNow.isPending ? "Running…" : "Run now (admin)"}
+          {runNow.isPending || isRunning ? "Running…" : "Run now (admin)"}
         </button>
       </header>
 
       {q.error && (
         <div className="card text-ink-muted">
-          <p>No picks yet today. Trigger one with the <b>Run now</b> button (admin only) — takes 2–5 minutes.</p>
+          <p>Couldn&apos;t reach the picks store.</p>
           <p className="text-xs mt-2 text-bear">{String(q.error.message).slice(0, 200)}</p>
         </div>
+      )}
+
+      {isRunning && (
+        <section className="card border-accent/40">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="size-2 rounded-full bg-accent animate-pulse" />
+            <h2 className="font-medium">
+              Generating today&apos;s top-10 — typically 2–5 minutes
+            </h2>
+          </div>
+          <p className="text-sm text-ink-muted">
+            Scoring ~30 tokens across every classical strategy, then writing
+            briefs for the top 5. This page polls every 15 seconds; results
+            will appear automatically.
+          </p>
+          {q.data?.notes && (
+            <p className="text-xs text-ink-soft mt-2">{q.data.notes}</p>
+          )}
+        </section>
       )}
 
       {q.data && (
@@ -64,12 +93,14 @@ export default function PicksPage() {
             <span>Scanned: {q.data.n_scanned}</span>
             <span>Picked: {q.data.n_picked}</span>
             {q.data.finished_at && <span>Finished: {q.data.finished_at}</span>}
-            {q.data.notes && <span className="text-ink-soft">{q.data.notes}</span>}
+            {q.data.notes && !isRunning && <span className="text-ink-soft">{q.data.notes}</span>}
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2">
-            {(q.data.picks ?? []).map((p) => <PickCard key={p.rank} p={p} />)}
-          </section>
+          {isCompleted && (
+            <section className="grid gap-3 sm:grid-cols-2">
+              {(q.data.picks ?? []).map((p) => <PickCard key={p.rank} p={p} />)}
+            </section>
+          )}
         </>
       )}
 
