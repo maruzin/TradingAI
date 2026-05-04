@@ -1,13 +1,22 @@
 // TradingAI service worker — minimal cache-first shell.
 //
-// Caches the app shell (HTML, JS chunks, CSS, fonts) so the PWA opens
-// instantly on repeat visits and works in airplane mode for read-only views.
-// Live data (prices, briefs, alerts) is NEVER cached — those use network-only
-// so a stale dashboard never shows wrong prices.
+// Caches static JS/CSS chunks + manifest so the PWA opens instantly on repeat
+// visits. Live data (prices, briefs, alerts) is NEVER cached — those use
+// network-only so a stale dashboard never shows wrong prices.
+//
+// IMPORTANT: bump VERSION any time we ship a fix that needs to override a
+// previously-shipped bug. The activate handler nukes every cache that doesn't
+// match the current VERSION, so an old client running this file pulls fresh
+// chunks on next reload. The HTML root (/) is intentionally NOT cached —
+// it references content-hashed chunks, so a stale HTML pointing at deleted
+// chunks would 404 and break the app.
+//
+// VERSION history:
+//   v1 — initial PWA shell
+//   v2 — drop / from SHELL; force cache invalidation after dashboard auth fix
 
-const VERSION = "tradingai-sw-v1";
+const VERSION = "tradingai-sw-v2";
 const SHELL = [
-  "/",
   "/manifest.json",
   "/favicon.ico",
 ];
@@ -42,9 +51,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for the app shell + static chunks; fall back to network.
+  // Never cache the HTML root — it references content-hashed JS chunks, and
+  // a stale HTML pointing at deleted chunks would 404 and break the app on
+  // every deploy. Let the network handle it (standard Next.js HTML caching
+  // headers from Vercel's CDN are sufficient).
+  if (url.pathname === "/") return;
+
+  // Cache-first for hashed static chunks + manifest/favicon. Chunks are
+  // content-hashed by Next so a cached chunk is correct forever.
   if (
-    url.pathname.startsWith("/_next/") ||
+    url.pathname.startsWith("/_next/static/") ||
     SHELL.includes(url.pathname) ||
     url.pathname.endsWith(".css") ||
     url.pathname.endsWith(".js") ||
