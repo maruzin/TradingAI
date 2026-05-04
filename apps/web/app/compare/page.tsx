@@ -115,7 +115,13 @@ function TokenColumn({ symbol, label }: { symbol: string; label: string }) {
           {brief.isLoading ? (
             <span className="text-xs text-ink-soft">loading…</span>
           ) : brief.error ? (
-            <span className="text-xs text-bear">unavailable</span>
+            <div className="text-xs text-ink-soft">
+              <span className="text-bear">no brief generated yet.</span>{" "}
+              <a href={`/token/${symbol.toLowerCase()}`} className="text-accent underline-offset-2 hover:underline">
+                Generate one
+              </a>
+              {" "}— first hit takes ~60s, then cached for 6h.
+            </div>
           ) : brief.data ? (
             <span className="chip text-xs">
               {String(brief.data.structured?.stance ?? "neutral")}
@@ -138,7 +144,9 @@ function TokenColumn({ symbol, label }: { symbol: string; label: string }) {
           </div>
         ) : (
           <div className="text-xs text-ink-soft">
-            {fc.isLoading ? "training…" : "no model yet"}
+            {fc.isLoading
+              ? "training…"
+              : "no model yet — predictor_trainer worker writes models on a weekly cron."}
           </div>
         )}
       </div>
@@ -147,7 +155,7 @@ function TokenColumn({ symbol, label }: { symbol: string; label: string }) {
         href={`/token/${symbol.toLowerCase()}`}
         className="text-xs text-accent underline-offset-2 hover:underline"
       >
-        Open full {symbol.toUpperCase()} brief →
+        Open full {symbol.toUpperCase()} view → (TradeMeter, entry/stop/target)
       </a>
     </article>
   );

@@ -14,8 +14,9 @@
 // VERSION history:
 //   v1 — initial PWA shell
 //   v2 — drop / from SHELL; force cache invalidation after dashboard auth fix
+//   v3 — alerts/theses/compare auth-state fixes; force fresh chunks
 
-const VERSION = "tradingai-sw-v2";
+const VERSION = "tradingai-sw-v3";
 const SHELL = [
   "/manifest.json",
   "/favicon.ico",

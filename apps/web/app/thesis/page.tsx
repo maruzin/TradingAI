@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { api, type Thesis } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
+import { AuthErrorCard } from "@/components/AuthErrorCard";
 
 const STATUS_COLOR: Record<string, string> = {
   open: "text-bull",
@@ -15,15 +16,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function ThesesPage() {
   const q = useQuery({ queryKey: ["theses"], queryFn: () => api.theses().then((d) => d.theses), retry: false });
   if (q.isError) {
-    const msg = String(q.error?.message || "");
-    const is401 = msg.includes("401");
-    return (
-      <div className="card text-sm text-ink-muted">
-        {is401
-          ? "Sign in to manage your investment theses."
-          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
-      </div>
-    );
+    return <AuthErrorCard error={q.error} purpose="manage your investment theses" />;
   }
   const theses = q.data ?? [];
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { api, type AlertRow } from "@/lib/api";
 import { Disclaimer } from "@/components/Disclaimer";
+import { AuthErrorCard } from "@/components/AuthErrorCard";
 import { Bell, BellOff, CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
 import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
 
@@ -137,15 +138,7 @@ function RulesList() {
 
   if (q.isLoading) return <div className="card text-sm text-ink-muted">loading rules…</div>;
   if (q.error) {
-    const msg = String(q.error.message);
-    const is401 = msg.includes("401");
-    return (
-      <div className="card text-sm text-ink-muted">
-        {is401
-          ? "Sign in to manage your alert rules."
-          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
-      </div>
-    );
+    return <AuthErrorCard error={q.error} purpose="manage your alert rules" />;
   }
   const rules = q.data ?? [];
   if (rules.length === 0) return <div className="card text-sm text-ink-muted">No rules yet.</div>;
@@ -189,15 +182,7 @@ function Inbox() {
   });
   if (q.isLoading) return <div className="card text-sm text-ink-muted">loading…</div>;
   if (q.error) {
-    const msg = String(q.error.message);
-    const is401 = msg.includes("401");
-    return (
-      <div className="card text-sm text-ink-muted">
-        {is401
-          ? "Sign in to see your alerts inbox."
-          : <span><b className="text-bear">Backend unreachable.</b> {msg.slice(0, 200)}</span>}
-      </div>
-    );
+    return <AuthErrorCard error={q.error} purpose="see your alerts inbox" />;
   }
   const alerts = q.data ?? [];
   return (

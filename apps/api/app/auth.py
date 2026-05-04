@@ -72,6 +72,25 @@ async def verify_jwt(token: str) -> CurrentUser | None:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
             r = await client.get(url, headers=headers)
         if r.status_code != 200:
+            # Log enough detail to diagnose env-var mismatches without leaking
+            # the full token. The most common failures are:
+            #   - 401 "invalid JWT" → SUPABASE_URL on the API points at a
+            #     different project than the frontend signs in to. Check that
+            #     NEXT_PUBLIC_SUPABASE_URL on Vercel == SUPABASE_URL on Fly.
+            #   - 401 "Invalid API key" → SUPABASE_ANON_KEY on the API doesn't
+            #     match the project. Re-copy from Supabase Settings → API.
+            #   - 403 with a JWT-shape error → token expired; client should
+            #     refresh (the JS SDK does this automatically).
+            body_preview = (r.text or "")[:160].replace("\n", " ")
+            tok_prefix = (token[:8] + "…") if token else "<empty>"
+            log.warning(
+                "auth.supabase_rejected",
+                status=r.status_code,
+                body=body_preview,
+                token_prefix=tok_prefix,
+                supabase_url=settings.supabase_url,
+                anon_key_set=bool(settings.supabase_anon_key),
+            )
             return None
         data = r.json()
     except Exception as e:
