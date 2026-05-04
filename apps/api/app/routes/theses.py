@@ -9,6 +9,7 @@ from ..auth import CurrentUser
 from ..deps import get_current_user
 from ..repositories import theses as theses_repo
 from ..services.coingecko import CoinGeckoClient
+from ._errors import safe_detail
 
 router = APIRouter()
 
@@ -41,7 +42,9 @@ async def create(
     try:
         snap = await cg.snapshot(body.token)
     except ValueError as e:
-        raise HTTPException(404, detail=str(e)) from e
+        raise HTTPException(
+            404, detail=safe_detail(e, f"token {body.token} not found"),
+        ) from e
     finally:
         await cg.close()
 

@@ -8,6 +8,7 @@ from ..auth import CurrentUser
 from ..deps import get_current_user
 from ..repositories import watchlists as wl_repo
 from ..services.coingecko import CoinGeckoClient
+from ._errors import safe_detail
 
 router = APIRouter()
 
@@ -84,7 +85,9 @@ async def add_item(
             address=snap.contract_address,
         )
     except PermissionError as e:
-        raise HTTPException(403, detail=str(e)) from e
+        raise HTTPException(
+            403, detail=safe_detail(e, "watchlist not accessible"),
+        ) from e
     return item
 
 

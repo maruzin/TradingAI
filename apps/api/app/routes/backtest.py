@@ -25,6 +25,7 @@ from ..backtest.report import render_matrix_markdown, render_run_markdown
 from ..backtest.strategies import get_strategy, list_strategy_names
 from ..logging_setup import get_logger
 from ..services.historical import FetchSpec, HistoricalClient
+from ._errors import safe_detail
 
 router = APIRouter()
 log = get_logger("routes.backtest")
@@ -55,7 +56,9 @@ async def run_backtest(req: BacktestRequest) -> dict:
     try:
         strategy = get_strategy(req.strategy)
     except ValueError as e:
-        raise HTTPException(404, detail=str(e)) from e
+        raise HTTPException(
+            404, detail=safe_detail(e, f"unknown strategy: {req.strategy}"),
+        ) from e
 
     until = datetime.now(UTC)
     since = until - timedelta(days=365 * req.years)

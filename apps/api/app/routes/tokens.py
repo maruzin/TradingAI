@@ -8,7 +8,7 @@ Sprint 0: no auth, no DB persistence. Sprint 2 wires Supabase RLS + caches brief
 from __future__ import annotations
 
 from datetime import UTC
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -27,6 +27,7 @@ from ..services.cvd import compute_cvd
 from ..services.predictor import forecast as predictor_forecast
 from ..services.rate_limit import RateLimitExceeded
 from ..services.rate_limit import enforce as enforce_rate_limit
+from ._errors import safe_detail
 
 router = APIRouter()
 log = get_logger("routes.tokens")
@@ -62,7 +63,10 @@ async def get_snapshot(symbol: str) -> dict:
     try:
         snap = await cg.snapshot(symbol)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(
+            status_code=404,
+            detail=safe_detail(e, f"token {symbol} not found"),
+        ) from e
     finally:
         await cg.close()
     return _snapshot_dict(snap)
@@ -115,10 +119,16 @@ async def get_brief(
     try:
         brief = await agent.brief(symbol, horizon=horizon)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(
+            status_code=404,
+            detail=safe_detail(e, f"brief unavailable for {symbol}"),
+        ) from e
     except RuntimeError as e:
         log.warning("brief.runtime_error", error=str(e))
-        raise HTTPException(status_code=503, detail=str(e)) from e
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(e, "AI provider temporarily unavailable"),
+        ) from e
     finally:
         await agent.close()
 
@@ -247,9 +257,15 @@ async def get_projection(
     try:
         proj = await project_token(symbol, timeframe=timeframe)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(
+            status_code=404,
+            detail=safe_detail(e, f"projection unavailable for {symbol}"),
+        ) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from e
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(e, "AI provider temporarily unavailable"),
+        ) from e
 
     await audit_repo.write(
         user_id=(user.id if user else None),
@@ -333,7 +349,8 @@ async def get_ta_snapshots(
 # strings the historical client + analyze() understand. Anything that asks for
 # a sub-hour interval falls back to 1h because the OHLCV cache + pattern
 # detectors are sized for 1h+ bars.
-_TF_ALIAS: dict[str, str] = {
+_HistoricalTF = Literal["1h", "4h", "1d"]
+_TF_ALIAS: dict[str, _HistoricalTF] = {
     "1": "1h", "5": "1h", "15": "1h", "30": "1h",
     "60": "1h", "1h": "1h",
     "240": "4h", "4h": "4h",
@@ -343,11 +360,11 @@ _TF_ALIAS: dict[str, str] = {
 }
 
 
-def _normalize_tf(tf: str) -> str:
+def _normalize_tf(tf: str) -> _HistoricalTF:
     return _TF_ALIAS.get(tf, "1d")
 
 
-async def _load_ohlcv_df(symbol: str, timeframe: str, *, days: int):
+async def _load_ohlcv_df(symbol: str, timeframe: _HistoricalTF, *, days: int):
     """Fetch a recent OHLCV window via the multi-exchange fallback chain.
 
     Returns the pandas DataFrame indexed by UTC timestamp, or None if every

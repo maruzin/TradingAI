@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..logging_setup import get_logger
 from ..settings import get_settings
+from ._errors import safe_detail
 
 router = APIRouter()
 log = get_logger("routes.markets")
@@ -73,7 +74,9 @@ async def list_markets(
         raise
     except Exception as e:
         log.warning("markets.fetch_failed", error=str(e))
-        raise HTTPException(503, detail=str(e)) from e
+        raise HTTPException(
+            503, detail=safe_detail(e, "market data temporarily unavailable")
+        ) from e
 
     out = {
         "page": page,

@@ -111,6 +111,9 @@ async def get_signals(
             # this; mirror here so /signals rows have actionable levels too.
             entry_price = snap.last_price
             atr = snap.volatility.atr_14 or (entry_price * 0.02)
+            stop_loss: float | None
+            take_profit: float | None
+            rr: float | None
             if verdict == "long_bias":
                 stop_loss = entry_price - 2 * atr
                 take_profit = entry_price + 4 * atr
