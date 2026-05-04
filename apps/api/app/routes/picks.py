@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, date as date_type, datetime, timedelta
+from datetime import UTC, datetime
+from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException
 

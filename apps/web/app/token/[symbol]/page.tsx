@@ -11,6 +11,9 @@ import { TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
 import { ShareBrief } from "@/components/ShareBrief";
 import { TAPanel } from "@/components/TAPanel";
 import { BotVerdictCard } from "@/components/BotVerdictCard";
+import { TradeMeter } from "@/components/TradeMeter";
+import { TradePlanCard } from "@/components/TradePlanCard";
+import { usePrefs } from "@/lib/prefs";
 import clsx from "clsx";
 
 // TradingView's embed script is ~50kB and only useful client-side. Lazy-load
@@ -61,6 +64,13 @@ export default function TokenPage() {
   const pathname = usePathname();
   const symbol = routeParams?.symbol ?? "bitcoin";
   const horizon = (sp?.get("horizon") as "swing" | "position" | "long" | null) ?? "position";
+  const setLastTokenSymbol = usePrefs((s) => s.setLastTokenSymbol);
+
+  // Remember the last token the user opened so the dashboard can offer to
+  // "Resume on BTC" on next visit (see app/page.tsx).
+  useEffect(() => {
+    if (symbol) setLastTokenSymbol(symbol);
+  }, [symbol, setLastTokenSymbol]);
 
   const tfFromUrl = sp?.get("tf");
   const [tf, setTfState] = useState<TFCode>(() => {
@@ -101,6 +111,21 @@ export default function TokenPage() {
     retry: 0,
   });
 
+  // Bot decision feeds the TradeMeter + TradePlanCard. Updated hourly by the
+  // bot_decider worker; we cache for 5 min on the client.
+  const botDecision = useQuery({
+    queryKey: ["bot-decision", symbol],
+    queryFn: () => api.botLatest(symbol),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: 0,
+  });
+
+  const decision = botDecision.data?.decision ?? null;
+  const meterScore = decision
+    ? (decision.composite_score ?? 5) * 10
+    : 50;
+
   return (
     <div className="space-y-5">
       <Header snapshot={snap.data} symbol={symbol} horizon={horizon} />
@@ -121,6 +146,31 @@ export default function TokenPage() {
           interval={tf}
         />
       </div>
+
+      {/* Visual buy/sell gauge + concrete trade plan, side-by-side on
+          desktop, stacked on mobile. */}
+      <section className="grid gap-3 md:grid-cols-[auto,1fr] items-stretch">
+        <div className="card flex flex-col items-center justify-center px-6">
+          <TradeMeter
+            score={meterScore}
+            confidence={decision?.confidence ?? 0.4}
+            size="md"
+            label="Bot signal"
+          />
+        </div>
+        {decision ? (
+          <TradePlanCard decision={decision} />
+        ) : (
+          <div className="card text-sm text-ink-muted">
+            <h2 className="font-medium">Trade plan</h2>
+            <p className="mt-1 text-xs">
+              Bot decision worker hasn&apos;t produced a verdict for this token
+              yet — runs every hour at minute :25 (and you can also visit
+              <code className="font-mono mx-1">/admin/health</code> to confirm).
+            </p>
+          </div>
+        )}
+      </section>
 
       <BotVerdictCard symbol={(snap.data?.symbol || symbol).toUpperCase()} />
 

@@ -6,8 +6,9 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { CalibrationHero } from "@/components/CalibrationHero";
 import { SectorTile } from "@/components/SectorTile";
 import { api, type Watchlist } from "@/lib/api";
-import { Plus, Trash2 } from "lucide-react";
-import { useRefreshIntervals, toRefetchInterval } from "@/lib/prefs";
+import { Plus, Trash2, History } from "lucide-react";
+import Link from "next/link";
+import { useRefreshIntervals, toRefetchInterval, usePrefs } from "@/lib/prefs";
 
 const FALLBACK_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "LINK"];
 
@@ -15,6 +16,7 @@ export default function Home() {
   const refresh = useRefreshIntervals();
   const wl = useQuery({ queryKey: ["watchlists"], queryFn: () => api.watchlists().then((d) => d.watchlists), retry: false });
   const isAuthed = !wl.isError;
+  const lastToken = usePrefs((s) => s.lastTokenSymbol);
 
   // ONE batch call for the demo watchlist instead of 8 parallel snapshot calls.
   // Demo dashboard works without auth; we always render top tokens.
@@ -76,6 +78,15 @@ export default function Home() {
   const lists = wl.data ?? [];
   return (
     <div className="space-y-8">
+      {lastToken && (
+        <Link
+          href={`/token/${lastToken.toLowerCase()}`}
+          className="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-accent border border-line rounded-full px-3 py-1 transition-colors"
+        >
+          <History className="size-3" />
+          Resume on {lastToken.toUpperCase()}
+        </Link>
+      )}
       <SectorTile />
       <CalibrationHero />
       {lists.length === 0 ? (

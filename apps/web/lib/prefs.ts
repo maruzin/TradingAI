@@ -38,6 +38,10 @@ interface PrefsState {
   // Theme. "system" follows OS prefers-color-scheme.
   theme: Theme;
   setTheme: (t: Theme) => void;
+
+  // Last token the user opened (for "resume where I left off" UX).
+  lastTokenSymbol: string | null;
+  setLastTokenSymbol: (sym: string | null) => void;
 }
 
 export const usePrefs = create<PrefsState>()(
@@ -51,6 +55,8 @@ export const usePrefs = create<PrefsState>()(
       setReducedMotion: (b) => set({ reducedMotion: b }),
       theme: "dark",
       setTheme: (t) => set({ theme: t }),
+      lastTokenSymbol: null,
+      setLastTokenSymbol: (sym) => set({ lastTokenSymbol: sym }),
     }),
     {
       name: "tradingai-prefs",
