@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .logging_setup import configure_logging, get_logger
+from .middleware import RequestIDMiddleware
 from .routes import (
     activity,
     admin_health,
@@ -100,7 +101,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["*"],
+        # Make X-Request-ID visible to the browser so the frontend can pin it
+        # onto Sentry breadcrumbs for cross-system correlation.
+        expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(RequestIDMiddleware)
 
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
