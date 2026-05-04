@@ -44,7 +44,6 @@ from ..services.historical import FetchSpec, HistoricalClient
 from ..services.indicators import compute_snapshot
 from ..services.patterns import analyze as analyze_patterns
 from ..services.scoring import score
-from ..services.wyckoff import classify as wyckoff_classify
 
 log = get_logger("worker.calibration_seeder")
 
@@ -119,15 +118,17 @@ async def seed(
                 try:
                     snap = compute_snapshot(window, symbol=base_symbol, timeframe="1d")
                     pat = analyze_patterns(window, symbol=base_symbol, timeframe="1d")
-                    wyck = wyckoff_classify(window)
-                    s = score(snap=snap, patterns=pat, wyckoff=wyck)
+                    s = score(
+                        symbol=base_symbol, snap=snap, patterns=pat,
+                        triggered_long=[], triggered_short=[],
+                    )
                 except Exception:
                     continue
 
-                stance = s.get("direction") or "neutral"
+                stance = s.direction or "neutral"
                 if stance == "neutral":
                     continue
-                composite = float(s.get("composite_score") or 0)
+                composite = float(s.composite or 0)
                 # Translate the 0-10 composite into a probability-shape number
                 # for calibration. 5/10 → 0.5, 7/10 → 0.7, 9/10 → 0.9 (capped).
                 confidence = max(0.5, min(0.95, composite / 10))

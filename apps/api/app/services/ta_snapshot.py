@@ -62,9 +62,15 @@ def compose(df: pd.DataFrame, *, symbol: str, timeframe: Timeframe) -> TASnapsho
     piv = pivots(df, method="standard")
     fibs = fibonacci(df)
 
-    s = compute_score(snap=ind, patterns=pat, wyckoff=wyck)
-    composite = float(s.get("composite_score") or 0.0)
-    direction = s.get("direction") or "neutral"
+    # No live strategies are evaluated at the snapshot level (those run in the
+    # daily-picks worker); pass empty trigger lists so the consensus component
+    # is zeroed but the rest of the score still computes.
+    s = compute_score(
+        symbol=symbol, snap=ind, patterns=pat,
+        triggered_long=[], triggered_short=[],
+    )
+    composite = float(s.composite or 0.0)
+    direction = s.direction or "neutral"
     confidence = max(0.0, min(0.99, composite / 10))
 
     last_price = float(df["close"].iloc[-1])
@@ -103,16 +109,19 @@ def compose(df: pd.DataFrame, *, symbol: str, timeframe: Timeframe) -> TASnapsho
         "fib_levels": (fibs.retracements if fibs else None),
     }
 
+    # TradeScore has no `suggested_entry`; entry = current bar close.
+    suggested_entry = last_price if direction in ("long", "short") else None
+
     return TASnapshot(
         symbol=symbol, timeframe=timeframe, captured_at=captured,
         stance=direction,
         confidence=confidence,
         composite_score=composite,
         last_price=last_price,
-        suggested_entry=s.get("suggested_entry"),
-        suggested_stop=s.get("suggested_stop"),
-        suggested_target=s.get("suggested_target"),
-        risk_reward=s.get("risk_reward"),
+        suggested_entry=suggested_entry,
+        suggested_stop=s.suggested_stop,
+        suggested_target=s.suggested_target,
+        risk_reward=s.risk_reward,
         atr_pct=ind.volatility.natr_14,
         summary=summary,
         rationale=rationale,
