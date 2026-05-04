@@ -51,6 +51,21 @@ fly secrets set -a <your-fly-app-name> \
   SENTRY_DSN="https://<id>@<org>.ingest.sentry.io/<project>"
 ```
 
+If you want CI to auto-deploy on push to `main`, add a Fly deploy token as a
+GitHub Actions repo secret:
+
+```bash
+# Mint via the Fly dashboard → Tokens, or:
+fly tokens create deploy --name github-actions --expiry 8760h
+
+# Then in GitHub: Settings → Secrets and variables → Actions → New secret:
+# Name:  FLY_API_TOKEN
+# Value: <paste the FlyV1 token>
+```
+
+A workflow that consumes it would then call `flyctl deploy --remote-only` with
+`FLY_API_TOKEN` exported in the env.
+
 The values for SUPABASE_* live in **Supabase → Project Settings → API** and **Database → Connection String → URI**.
 
 The `SUPABASE_DB_URL` should be the **Session pooler** connection string for production — it survives serverless cold starts better than the direct connection.
