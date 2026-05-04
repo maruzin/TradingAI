@@ -21,6 +21,8 @@ from httpx import ASGITransport
 from app.main import app
 from app.services.meter import (
     BAND_LABELS,
+    Component,
+    alignment_count,
     band_for,
     compose_envelope,
     confidence_label_for,
@@ -225,6 +227,48 @@ class TestComposeEnvelope:
         }
         env = compose_envelope(symbol="BTC", tick=tick, decision=None)
         assert env["stale"] is True
+
+
+# ─── alignment_count ──────────────────────────────────────────────────────
+class TestAlignmentCount:
+    def test_empty_yields_zero_neutral(self):
+        out = alignment_count([])
+        assert out == {"aligned": 0, "total": 0, "side": "neutral"}
+
+    def test_strong_long_with_5_of_6_aligned(self):
+        comps = [
+            Component(name="ta", signal=0.5, weight=0.5, contribution=0.25),
+            Component(name="ml", signal=0.4, weight=0.2, contribution=0.08),
+            Component(name="sentiment", signal=0.5, weight=0.05, contribution=0.025),  # too small
+            Component(name="onchain", signal=0.5, weight=0.05, contribution=0.05),     # at threshold (>=0.05)
+            Component(name="funding", signal=-0.2, weight=0.05, contribution=-0.01),
+            Component(name="regime", signal=0.5, weight=0.10, contribution=0.05),
+        ]
+        out = alignment_count(comps)
+        assert out["side"] == "long"
+        assert out["total"] == 6
+        # ta (0.25), ml (0.08), onchain (0.05), regime (0.05) = 4 aligned
+        assert out["aligned"] == 4
+
+    def test_short_majority_classified_correctly(self):
+        comps = [
+            {"name": "ta", "signal": -0.4, "weight": 0.5, "contribution": -0.20},
+            {"name": "ml", "signal": -0.3, "weight": 0.2, "contribution": -0.06},
+            {"name": "regime", "signal": 0.4, "weight": 0.1, "contribution": 0.04},
+        ]
+        out = alignment_count(comps)
+        assert out["side"] == "short"
+        assert out["aligned"] == 2  # ta + ml; regime is the wrong side and below threshold
+
+    def test_balanced_net_yields_neutral(self):
+        comps = [
+            {"contribution": 0.10},
+            {"contribution": -0.10},
+            {"contribution": 0.001},
+        ]
+        out = alignment_count(comps)
+        assert out["side"] == "neutral"
+        assert out["aligned"] == 0
 
 
 # ─── Route integration ────────────────────────────────────────────────────

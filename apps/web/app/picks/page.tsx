@@ -7,6 +7,8 @@ import { api, type DailyPick } from "@/lib/api";
 import { fmtUsd } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Button, Card, Badge, ErrorState, LoadingState } from "@/components/ui";
+import { PaperTradeButton } from "@/components/PaperTradeButton";
+import { AnalogsBadge } from "@/components/AnalogsBadge";
 
 const DIR_TONE: Record<string, "bull" | "bear" | "neutral"> = {
   long: "bull",
@@ -193,6 +195,33 @@ function PickCard({ p }: { p: DailyPick }) {
       {p.brief_id && (
         <span className="text-micro text-accent">📄 full brief attached</span>
       )}
+
+      {/* Phase-5: historical analogs + take-on-paper button. Both stop the
+          link click from bubbling so the user can interact without
+          accidentally navigating to /token/{symbol}. */}
+      <div
+        className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-line/40"
+        onClick={(e) => e.preventDefault()}
+      >
+        <AnalogsBadge
+          symbol={p.symbol}
+          direction={p.direction === "short" ? "short" : "long"}
+          compositeScore={p.composite_score}
+        />
+        {p.last_price && (p.direction === "long" || p.direction === "short") && (
+          <PaperTradeButton
+            symbol={p.symbol}
+            side={p.direction}
+            entryPrice={p.last_price}
+            stopPrice={p.suggested_stop ?? null}
+            targetPrice={p.suggested_target ?? null}
+            horizon="position"
+            originKind="pick"
+            originId={String(p.rank)}
+            size="sm"
+          />
+        )}
+      </div>
     </Link>
   );
 }

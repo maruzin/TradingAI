@@ -230,6 +230,47 @@ def derive_components(
     return components
 
 
+# ─── Signal alignment count ───────────────────────────────────────────────
+def alignment_count(components: list[Component] | list[dict[str, Any]]) -> dict[str, int]:
+    """Count how many components contributed a non-trivial same-side signal.
+
+    Returns ``{"aligned": k, "total": n, "side": "long"|"short"|"neutral"}``
+    where ``aligned`` is the count of contributions whose magnitude ≥ 0.05
+    AND whose sign matches the dominant net direction. Surfaces in the
+    meter envelope as ``signal_alignment_count`` so the UI can render an
+    "8 of 9 inputs aligned" badge — the strongest setups have broad
+    agreement, not just one heavyweight component.
+
+    Threshold of 0.05 filters out near-zero stubs (e.g. funding when
+    ``funding_pct == 0`` registers as a real component but contributes
+    essentially nothing) without being so strict it drops legitimately
+    soft signals.
+    """
+    if not components:
+        return {"aligned": 0, "total": 0, "side": "neutral"}
+    contribs: list[float] = []
+    for c in components:
+        v = c.contribution if isinstance(c, Component) else c.get("contribution", 0)
+        try:
+            contribs.append(float(v))
+        except (TypeError, ValueError):
+            contribs.append(0.0)
+    total = len(contribs)
+    net = sum(contribs)
+    if abs(net) < 0.01:
+        return {"aligned": 0, "total": total, "side": "neutral"}
+    target_sign = 1 if net > 0 else -1
+    aligned = sum(
+        1 for c in contribs
+        if (c > 0 and target_sign > 0 or c < 0 and target_sign < 0) and abs(c) >= 0.05
+    )
+    return {
+        "aligned": aligned,
+        "total": total,
+        "side": "long" if target_sign > 0 else "short",
+    }
+
+
 def next_refresh_at(captured_at: datetime, *, interval_min: int = REFRESH_INTERVAL_MIN) -> datetime:
     """Project the next 15-minute boundary after ``captured_at``. Used by the
     route so the UI can render a deterministic countdown."""
@@ -330,6 +371,8 @@ def compose_envelope(
         for h in (history or [])
     ]
 
+    alignment = alignment_count(components_payload)
+
     return {
         "symbol": symbol.upper(),
         "value": value,
@@ -342,6 +385,9 @@ def compose_envelope(
         "raw_score": (round(raw_score, 2) if raw_score is not None else None),
         "components": components_payload,
         "weights": weights,
+        # n-of-N alignment — how many of the bot's inputs agreed on the
+        # dominant direction. Surfaced as a "8 of 9 aligned" badge in the UI.
+        "signal_alignment_count": alignment,
         "updated_at": captured_at.isoformat(timespec="seconds"),
         "next_update_at": next_refresh_at(captured_at).isoformat(timespec="seconds"),
         "stale": stale,

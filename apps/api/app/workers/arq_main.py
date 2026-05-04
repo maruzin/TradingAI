@@ -30,6 +30,10 @@ from . import (
     daily_picks,
     gossip_poller,
     meter_refresher,
+    options_refresher,
+    paper_evaluator,
+    performance_daily,
+    pick_outcome_evaluator,
     predictor_trainer,
     price_poller,
     setup_watcher,
@@ -71,6 +75,19 @@ class WorkerSettings:
         # fresh regime + TA inputs and inherited sentiment/funding/ML from
         # the latest hourly bot decision.
         cron(meter_refresher.run,     minute={i for i in range(0, 60) if i % 15 == 0}),
+        # Paper-trading evaluator — same 15-min cadence, checks every open
+        # paper position against latest TA price for stop/target/expiry.
+        cron(paper_evaluator.run,     minute={i for i in range(0, 60) if i % 15 == 5}),
+        # Options-flow snapshot — Deribit DVOL + skew + GEX every 30 min
+        # for BTC + ETH (SOL gated on OPTIONS_TRACK_SOL env var).
+        cron(options_refresher.run,   minute={0, 30}),
+        # Daily pick-outcome grading — walks every pick from the last 95
+        # days and grades it against forward OHLCV at 7/30/90-day horizons.
+        cron(pick_outcome_evaluator.run, hour={2}, minute={15}),
+        # Daily performance roll-up — runs after pick_outcome_evaluator so
+        # it sees today's gradings, then writes one row to
+        # system_performance_daily for the /performance hero.
+        cron(performance_daily.run,   hour={2}, minute={45}),
         cron(thesis_tracker.run,      minute={7}),
         cron(daily_digest.run,        hour={9}, minute={0}),
         cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks

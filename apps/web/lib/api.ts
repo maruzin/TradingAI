@@ -835,6 +835,68 @@ export const api = {
   // meter_refresher cron + meter_ticks table; falls back to the latest
   // bot_decision when no ticks have been written yet for the symbol.
   meter: (symbol: string) => jsonFetch<MeterEnvelope>(`/meter/${encodeURIComponent(symbol)}`),
+
+  // Phase-5: paper-trading sandbox.
+  paper: {
+    open: (body: PaperOpenRequest) =>
+      jsonFetch<PaperPosition>(`/paper/open`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    list: (status?: PaperStatus) =>
+      jsonFetch<{ positions: PaperPosition[]; error?: string }>(
+        `/paper/positions${status ? `?status=${status}` : ""}`,
+      ),
+    get: (id: string) => jsonFetch<PaperPosition>(`/paper/positions/${id}`),
+    close: (id: string, exit_price: number) =>
+      jsonFetch<{ id: string; status: PaperStatus; exit_price: number; realized_pct: number; realized_usd: number; held_hours: number }>(
+        `/paper/positions/${id}/close`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ exit_price }),
+        },
+      ),
+    pnl: () => jsonFetch<PaperPnlSummary>(`/paper/pnl`),
+    horizons: () => jsonFetch<{ horizons: { id: string; max_hold_hours: number; max_hold_days: number }[] }>(`/paper/horizons`),
+  },
+
+  // Phase-5: Deribit options flow.
+  options: (currency: "BTC" | "ETH" | "SOL") =>
+    jsonFetch<OptionsEnvelope>(`/options/${currency}`),
+
+  // Phase-5: bot self-graded track record.
+  performance: (days = 90) =>
+    jsonFetch<PerformanceEnvelope>(`/performance?days=${days}`),
+  performanceAnalogs: (
+    symbol: string,
+    opts?: { direction?: "long" | "short"; composite_score?: number; tolerance?: number; days?: number },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.direction) qs.set("direction", opts.direction);
+    if (opts?.composite_score !== undefined) qs.set("composite_score", String(opts.composite_score));
+    if (opts?.tolerance !== undefined) qs.set("composite_tolerance", String(opts.tolerance));
+    if (opts?.days !== undefined) qs.set("days", String(opts.days));
+    return jsonFetch<AnalogsEnvelope>(`/performance/analogs/${encodeURIComponent(symbol)}?${qs}`);
+  },
+
+  // Phase-5: public calibration page (opt-in per user).
+  publicCalibration: {
+    fetch: (alias: string) =>
+      jsonFetch<PublicCalibrationEnvelope>(`/public/calibration/${alias}`),
+    myStatus: () =>
+      jsonFetch<{ public_calibration_optin: boolean; alias: string | null }>(`/public/calibration/me/status`),
+    setOptIn: (enable: boolean) =>
+      jsonFetch<{ public_calibration_optin: boolean; alias: string | null }>(
+        `/public/calibration/optin`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enable }),
+        },
+      ),
+  },
 };
 
 export type MeterBand =
@@ -859,6 +921,12 @@ export type MeterHistoryPoint = {
   band: MeterBand | null;
 };
 
+export type MeterAlignment = {
+  aligned: number;        // count of components on the dominant side w/ |contribution| >= 0.05
+  total: number;          // total components
+  side: "long" | "short" | "neutral";
+};
+
 export type MeterEnvelope = {
   symbol: string;
   value: number;                    // -100..+100, positive = buy bias
@@ -869,9 +937,173 @@ export type MeterEnvelope = {
   raw_score: number | null;         // 0..10 from bot_decider
   components: MeterComponent[];
   weights: Record<string, number>;
+  signal_alignment_count?: MeterAlignment;
   updated_at: string;
   next_update_at: string;
   stale: boolean;
   history: MeterHistoryPoint[];
   source: "meter_ticks" | "bot_decisions" | "empty";
+};
+
+// ─── Phase-5 types: paper / options / performance / public-calibration ─────
+export type PaperStatus = "open" | "closed_target" | "closed_stop" | "closed_manual" | "closed_expired";
+export type PaperSide = "long" | "short";
+export type PaperHorizon = "swing" | "position" | "long";
+export type PaperOriginKind = "manual" | "pick" | "bot_decision" | "meter";
+
+export type PaperOpenRequest = {
+  symbol: string;
+  side: PaperSide;
+  size_usd: number;
+  entry_price: number;
+  stop_price?: number | null;
+  target_price?: number | null;
+  horizon?: PaperHorizon;
+  origin_kind?: PaperOriginKind;
+  origin_id?: string | null;
+  note?: string | null;
+};
+
+export type PaperPosition = {
+  id: string;
+  symbol: string;
+  side: PaperSide;
+  status: PaperStatus;
+  opened_at: string;
+  closed_at?: string | null;
+  size_usd: number;
+  entry_price: number;
+  stop_price?: number | null;
+  target_price?: number | null;
+  exit_price?: number | null;
+  realized_pct?: number | null;
+  realized_usd?: number | null;
+  held_hours?: number | null;
+  origin_kind?: PaperOriginKind | null;
+  origin_id?: string | null;
+  horizon?: PaperHorizon | null;
+  note?: string | null;
+  // Optional live-enrichment fields when fetching one position.
+  last_price?: number;
+  unrealized_pct?: number;
+  unrealized_usd?: number;
+};
+
+export type PaperPnlSummary = {
+  n_open: number;
+  n_closed: number;
+  n_target_hits: number;
+  n_stop_hits: number;
+  n_manual: number;
+  cum_realized_pct: number;
+  cum_realized_usd: number;
+  avg_realized_pct: number;
+  avg_hold_hours: number;
+};
+
+export type OptionsHistoryPoint = {
+  at: string | null;
+  dvol: number | null;
+  skew_25d_30d: number | null;
+  atm_iv_30d: number | null;
+  put_call_ratio_oi: number | null;
+  gex_zero_flip_usd: number | null;
+};
+
+export type OptionsGexStrike = {
+  strike: number;
+  gamma_usd: number;
+};
+
+export type OptionsEnvelope = {
+  currency: "BTC" | "ETH" | "SOL";
+  source: "deribit" | "empty";
+  captured_at: string | null;
+  spot: number | null;
+  dvol_value: number | null;
+  dvol_pct_24h?: number | null;
+  skew_25d_30d: number | null;
+  skew_25d_60d: number | null;
+  atm_iv_7d: number | null;
+  atm_iv_30d: number | null;
+  atm_iv_90d: number | null;
+  open_interest_usd: number | null;
+  volume_24h_usd: number | null;
+  put_call_ratio_oi: number | null;
+  gex_zero_flip_usd: number | null;
+  history: OptionsHistoryPoint[];
+  gex_strikes: OptionsGexStrike[];
+};
+
+export type PerformanceEnvelope = {
+  since_days: number;
+  summary: {
+    n_graded: number;
+    n_target: number;
+    n_stop: number;
+    n_expired_pos: number;
+    n_expired_neg: number;
+    avg_realized_pct: number | null;
+    cum_realized_pct: number | null;
+  };
+  latest_day: {
+    day: string;
+    cum_realized_pct: number;
+    btc_benchmark_pct: number;
+    realized_pct_today: number;
+    n_picks_graded: number;
+    n_target_hits: number;
+    n_stop_hits: number;
+    n_expired_neutral: number;
+  } | null;
+  daily: Array<{
+    day: string;
+    n_picks_graded: number;
+    n_target_hits: number;
+    n_stop_hits: number;
+    n_expired_neutral: number;
+    cum_realized_pct: number;
+    btc_benchmark_pct: number;
+    realized_pct_today: number;
+  }>;
+};
+
+export type AnalogsEnvelope = {
+  symbol: string;
+  direction: "long" | "short";
+  composite_score: number | null;
+  composite_tolerance: number;
+  since_days: number;
+  n_analogs: number;
+  n_target: number;
+  n_stop: number;
+  n_expired_pos: number;
+  n_expired_neg: number;
+  hit_rate: number | null;
+  median_realized_pct: number | null;
+  best_pct: number | null;
+  worst_pct: number | null;
+  cumulative_curve: { at: string; cum_pct: number }[];
+};
+
+export type PublicCalibrationEnvelope = {
+  alias: string;
+  since_days: number;
+  bot_track_record: {
+    n_graded: number;
+    n_target: number;
+    n_stop: number;
+    avg_realized_pct: number;
+    cum_realized_pct: number;
+  };
+  user_paper_record: {
+    n_closed?: number;
+    n_target_hits?: number;
+    n_stop_hits?: number;
+    n_expired?: number;
+    cum_realized_pct?: number;
+    avg_realized_pct?: number;
+    avg_hold_hours?: number;
+  };
+  disclaimer: string;
 };

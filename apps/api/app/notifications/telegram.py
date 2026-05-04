@@ -70,6 +70,42 @@ class TelegramSender:
 
 
 # -----------------------------------------------------------------------------
+# Top-level convenience: notify_user(user_id, message)
+# -----------------------------------------------------------------------------
+async def notify_user(user_id: str | None, text: str) -> bool:
+    """Look up the user's Telegram chat_id and send ``text``.
+
+    Best-effort: returns False (and logs a warning) when the user has no
+    linked chat_id, when the bot has no token, or when Telegram errors.
+    Never raises — callers in cron paths shouldn't break on a notification
+    failure.
+    """
+    if not user_id:
+        return False
+    try:
+        from .. import db
+        row = await db.fetchrow(
+            "select telegram_chat_id from user_profiles where id = $1::uuid",
+            user_id,
+        )
+        chat_id = row["telegram_chat_id"] if row else None
+    except Exception as e:
+        log.debug("telegram.notify_user.lookup_failed", user=user_id, error=str(e))
+        return False
+    if not chat_id:
+        return False
+
+    sender = TelegramSender()
+    try:
+        return await sender.send(TelegramMessage(
+            chat_id=str(chat_id), text=text, parse_mode="HTML",
+            disable_web_page_preview=True,
+        ))
+    finally:
+        await sender.close()
+
+
+# -----------------------------------------------------------------------------
 # Alert formatting
 # -----------------------------------------------------------------------------
 def format_alert(*, title: str, body: str | None, severity: str,

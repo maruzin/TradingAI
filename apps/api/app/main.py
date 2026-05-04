@@ -27,8 +27,12 @@ from .routes import (
     markets,
     me,
     meter,
+    options,
+    paper,
+    performance,
     picks,
     portfolio,
+    public_calibration,
     regime,
     signals,
     system,
@@ -131,6 +135,10 @@ def create_app() -> FastAPI:
     app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
     app.include_router(ev.router, prefix="/api/ev", tags=["ev"])
     app.include_router(meter.router, prefix="/api/meter", tags=["meter"])
+    app.include_router(paper.router, prefix="/api/paper", tags=["paper"])
+    app.include_router(options.router, prefix="/api/options", tags=["options"])
+    app.include_router(performance.router, prefix="/api/performance", tags=["performance"])
+    app.include_router(public_calibration.router, prefix="/api/public/calibration", tags=["public"])
 
     return app
 

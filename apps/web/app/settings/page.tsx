@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { usePrefs, REFRESH_TIERS, type RefreshTier, type Theme } from "@/lib/prefs";
 import { TF_OPTIONS } from "@/components/TradingViewWidget";
 import { RiskProfileSection } from "@/components/RiskProfileSection";
+import { PublicCalibrationSection } from "@/components/PublicCalibrationSection";
 
 export default function SettingsPage() {
   const mint = useMutation({ mutationFn: () => api.mintTelegramCode() });
@@ -25,6 +26,8 @@ export default function SettingsPage() {
       </header>
 
       <RiskProfileSection />
+
+      <PublicCalibrationSection />
 
       <section className="card space-y-4">
         <div>

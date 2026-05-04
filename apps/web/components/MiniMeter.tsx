@@ -136,6 +136,11 @@ export function MiniMeter({ symbol }: { symbol: string }) {
               {value > 0 ? "+" : ""}{value}
             </span>
           </span>
+          {env?.signal_alignment_count && env.signal_alignment_count.total > 0 && (
+            <span className="text-micro text-ink-soft tabular-nums">
+              {env.signal_alignment_count.aligned}/{env.signal_alignment_count.total} aligned
+            </span>
+          )}
         </>
       )}
     </Link>

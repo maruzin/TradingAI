@@ -26,6 +26,7 @@ import { api, type MeterEnvelope, type MeterComponent } from "@/lib/api";
 import { TradeMeter } from "@/components/TradeMeter";
 import { Card, Badge, Tooltip } from "@/components/ui";
 import { Disclaimer } from "@/components/Disclaimer";
+import { AlignmentBadge } from "@/components/AlignmentBadge";
 import { AlertTriangle, Clock, Info } from "lucide-react";
 import clsx from "clsx";
 
@@ -93,9 +94,10 @@ export function MeterCard({
     <Card emphasis={env.stale ? "warn" : "none"}>
       <Card.Header
         title={
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 flex-wrap">
             {env.symbol} pressure
             <Badge tone={BAND_TONE[env.band]} appearance="subtle">{env.band_label}</Badge>
+            <AlignmentBadge alignment={env.signal_alignment_count} />
             {env.stale && (
               <Tooltip content="The meter hasn't been refreshed in over 30 minutes — the value below may be out of date.">
                 <Badge tone="warn" appearance="outline" size="sm" icon={<AlertTriangle aria-hidden />}>

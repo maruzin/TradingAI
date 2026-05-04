@@ -74,16 +74,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {/* Signals */}
                   <Link href="/picks" className="hover:text-ink transition-colors">Picks</Link>
                   <Link href="/signals" className="hover:text-ink transition-colors">Signals</Link>
+                  <Link href="/options" className="hover:text-ink transition-colors">Options</Link>
                   <Link href="/gossip" className="hover:text-ink transition-colors">Gossip</Link>
                   <Link href="/ev" className="hover:text-ink transition-colors">EV</Link>
                   <span aria-hidden className="h-3 w-px bg-line/60 mx-1" />
                   {/* Portfolio */}
+                  <Link href="/paper" className="hover:text-ink transition-colors">Paper</Link>
                   <Link href="/wallets" className="hover:text-ink transition-colors">Wallets</Link>
                   <Link href="/thesis" className="hover:text-ink transition-colors">Theses</Link>
                   <Link href="/alerts" className="hover:text-ink transition-colors">Alerts</Link>
                   <span aria-hidden className="h-3 w-px bg-line/60 mx-1" />
                   {/* Research */}
                   <Link href="/backtest" className="hover:text-ink transition-colors">Backtest</Link>
+                  <Link href="/performance" className="hover:text-ink transition-colors">Track</Link>
                   <Link href="/about" className="hover:text-ink transition-colors">About</Link>
                 </nav>
                 <div className="flex items-center gap-3">
