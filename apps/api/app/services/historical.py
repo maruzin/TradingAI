@@ -129,7 +129,12 @@ class HistoricalClient:
                 break
 
         df = _to_df(all_rows)
-        df = df[(df.index >= pd.Timestamp(since)) & (df.index < pd.Timestamp(until))]
+        # _to_df returns an empty DataFrame with the default RangeIndex when
+        # ``rows`` is empty; comparing a numeric index to a Timestamp throws
+        # ``'>=' not supported between numpy.ndarray and Timestamp``. Skip
+        # the filter on an empty frame.
+        if not df.empty:
+            df = df[(df.index >= pd.Timestamp(since)) & (df.index < pd.Timestamp(until))]
         return FetchResult(
             spec=spec,
             rows=len(df),

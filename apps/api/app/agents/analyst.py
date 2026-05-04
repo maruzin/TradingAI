@@ -204,7 +204,7 @@ class AnalystAgent:
                 ell = label_elliott(fr.df)
                 elliott_block = ell.as_brief_block()
                 # Multi-TF confluence: pull 1d + 4h + 1h for the same pair.
-                frames: dict[str, any] = {tf: fr.df}
+                frames: dict[str, Any] = {tf: fr.df}
                 for extra_tf in ("1d", "4h", "1h"):
                     if extra_tf == tf:
                         continue

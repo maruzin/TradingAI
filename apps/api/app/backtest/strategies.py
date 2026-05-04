@@ -187,11 +187,11 @@ class IchimokuCloudBreak:
         sa_p, sb_p = snap_prev.trend.ichimoku_senkou_a, snap_prev.trend.ichimoku_senkou_b
         last = snap_now.last_price
         prev_close = float(df["close"].iloc[-2])
-        if None in (sa_n, sb_n, sa_p, sb_p):
+        if sa_n is None or sb_n is None or sa_p is None or sb_p is None:
             return None
-        cloud_top_n = max(sa_n, sb_n)              # type: ignore[arg-type]
-        cloud_top_p = max(sa_p, sb_p)              # type: ignore[arg-type]
-        cloud_bot_n = min(sa_n, sb_n)              # type: ignore[arg-type]
+        cloud_top_n = max(sa_n, sb_n)
+        cloud_top_p = max(sa_p, sb_p)
+        cloud_bot_n = min(sa_n, sb_n)
         if prev_close <= cloud_top_p and last > cloud_top_n:
             return Signal(kind="enter_long", confidence=0.65, rationale={"strategy": self.name, "break": "above_cloud"})
         if prev_close >= cloud_bot_n and last < cloud_bot_n:

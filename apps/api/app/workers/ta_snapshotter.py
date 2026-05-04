@@ -41,8 +41,10 @@ DEFAULT_UNIVERSE = [
     "DOT/USDT", "ATOM/USDT", "NEAR/USDT", "ARB/USDT", "OP/USDT",
 ]
 
-# Minimum bars + lookback window per timeframe.
-WINDOWS: dict[str, dict[str, int]] = {
+# Minimum bars + lookback window per timeframe. Values are mixed int + str
+# (days/min_bars vs the historical-client tf string) — typed loosely to
+# accommodate both.
+WINDOWS: dict[str, dict[str, int | str]] = {
     "1h":  {"days": 30, "min_bars": 200, "tf": "1h"},
     "3h":  {"days": 90, "min_bars": 200, "tf": "4h"},   # 3h ≈ 4h proxy
     "6h":  {"days": 180, "min_bars": 200, "tf": "4h"},  # aggregate at compose
@@ -110,7 +112,10 @@ async def run_for_tf(timeframe: Literal["1h","3h","6h","12h","1d"]) -> dict[str,
                               pair=pair, tf=timeframe, error=str(e))
                     failed += 1
 
-        await asyncio.gather(*[_one(p) for p in universe])
+        # return_exceptions=True so a single bad pair (network blip, DB
+        # write race) doesn't tear down the gather and leak the unfinished
+        # tasks' aiohttp sessions before we get to h.close().
+        await asyncio.gather(*[_one(p) for p in universe], return_exceptions=True)
     finally:
         await h.close()
 

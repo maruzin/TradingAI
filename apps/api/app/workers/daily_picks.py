@@ -144,7 +144,9 @@ async def run(
             })
 
     try:
-        await asyncio.gather(*[_score_one(p, c) for p, c in universe])
+        await asyncio.gather(
+            *[_score_one(p, c) for p, c in universe], return_exceptions=True,
+        )
     finally:
         await historical.close()
 

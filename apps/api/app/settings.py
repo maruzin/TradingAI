@@ -6,9 +6,9 @@ from anywhere else. This is the seam where local dev / staging / prod diverge.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,26 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _strip_strings(cls, v: Any) -> Any:
+        """Strip whitespace and trailing inline comments from .env string
+        values. python-dotenv keeps `KEY=value  # comment` as the literal
+        ``"value  # comment"``, which then trips the truthiness checks
+        downstream (e.g. CoinGecko picking the Pro endpoint when the key
+        is actually empty)."""
+        if isinstance(v, str):
+            stripped = v.strip()
+            # Treat `value # comment` and `# only-comment` as the value
+            # before the `#` (only when there's whitespace before it, so
+            # values that legitimately contain `#` aren't truncated).
+            if " #" in stripped:
+                stripped = stripped.split(" #", 1)[0].strip()
+            elif "\t#" in stripped:
+                stripped = stripped.split("\t#", 1)[0].strip()
+            return stripped or None
+        return v
 
     # --- general ---
     environment: Literal["development", "staging", "production"] = "development"

@@ -70,10 +70,12 @@ class WorkerSettings:
         cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks
         cron(daily_picks.cron_run,    hour={7}, minute={0}),
         cron(backtest_evaluator.run,  hour={1}, minute={0}),
-        # Weekly retrain — Sunday 02:00 UTC.
-        cron(predictor_trainer.run,   weekday={"sun"}, hour={2}, minute={0}),
+        # Weekly retrain — Sunday 02:00 UTC. arq's cron() weekday param accepts
+        # day-of-week strings at runtime ("sun"/"mon"/...) but its typing stub
+        # only declares int, hence the ignore.
+        cron(predictor_trainer.run,   weekday={"sun"}, hour={2}, minute={0}),  # type: ignore[arg-type]
         # Weekly weight tuning — Sunday 03:00 UTC, after the trainer cycle.
-        cron(weight_tuner.run,        weekday={"sun"}, hour={3}, minute={0}),
+        cron(weight_tuner.run,        weekday={"sun"}, hour={3}, minute={0}),  # type: ignore[arg-type]
     ]
     on_startup = startup
     on_shutdown = shutdown
