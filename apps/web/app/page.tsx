@@ -16,13 +16,24 @@ import {
   usePrefs,
   type DashboardSectionId,
 } from "@/lib/prefs";
+import { useAuthSession } from "@/lib/auth";
 
 const FALLBACK_SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "LINK"];
 
 export default function Home() {
   const refresh = useRefreshIntervals();
-  const wl = useQuery({ queryKey: ["watchlists"], queryFn: () => api.watchlists().then((d) => d.watchlists), retry: false });
-  const isAuthed = !wl.isError;
+  // Auth state comes from Supabase directly — never inferred from an API
+  // call's success/failure. A 503 from /watchlists doesn't mean "user is
+  // anonymous", it means "DB is down" — and conflating the two used to
+  // show a signed-in user the demo watchlist with a "Sign in" prompt.
+  const auth = useAuthSession();
+  const isAuthed = auth.isAuthenticated;
+  const wl = useQuery({
+    queryKey: ["watchlists"],
+    queryFn: () => api.watchlists().then((d) => d.watchlists),
+    retry: false,
+    enabled: isAuthed,  // skip the call entirely when we know we're anonymous
+  });
   const lastToken = usePrefs((s) => s.lastTokenSymbol);
   const layout = usePrefs((s) => s.dashboardLayout);
 
@@ -32,8 +43,19 @@ export default function Home() {
     queryKey: ["markets", 1],
     queryFn: () => api.markets(1, "market_cap_desc"),
     refetchInterval: toRefetchInterval(refresh.pricesMs),
-    enabled: !isAuthed,
+    enabled: !isAuthed && !auth.loading,
   });
+
+  // While Supabase is restoring the session from localStorage, render a
+  // neutral skeleton instead of flashing the demo state to a user who's
+  // actually signed in. The check is microsecond-fast in practice.
+  if (auth.loading) {
+    return (
+      <div className="space-y-6">
+        <div className="card text-sm text-ink-muted">restoring session…</div>
+      </div>
+    );
+  }
 
   if (!isAuthed) {
     const coins = (markets.data?.coins ?? []).filter((c) =>
@@ -84,6 +106,14 @@ export default function Home() {
   }
 
   const lists = wl.data ?? [];
+  // The watchlists endpoint is allowed to fail independently of auth — DB
+  // hiccup, RLS misfire, etc. Show a specific error so the rest of the
+  // dashboard still renders (sector tile, activity feed, etc. don't depend
+  // on watchlists).
+  const watchlistError = wl.error
+    ? String((wl.error as Error).message ?? wl.error).slice(0, 240)
+    : null;
+
   // Map each section id → the JSX it should render. Anything not in this map
   // is silently skipped (defensive against stale layout entries).
   const sectionRenderers: Record<DashboardSectionId, () => ReactNode> = {
@@ -100,20 +130,39 @@ export default function Home() {
     sector: () => <SectorTile />,
     calibration: () => <CalibrationHero />,
     activity: () => <ActivityFeed />,
-    watchlists: () =>
-      lists.length === 0 ? (
-        <>
-          <EmptyState />
-          <CreateWatchlistButton />
-        </>
-      ) : (
+    watchlists: () => {
+      if (wl.isLoading) {
+        return <div className="card text-sm text-ink-muted">loading watchlists…</div>;
+      }
+      if (watchlistError) {
+        return (
+          <div className="card text-sm">
+            <h2 className="font-medium text-warn">Watchlists unavailable</h2>
+            <p className="text-ink-muted text-xs mt-1">
+              The watchlists API errored. The rest of the dashboard still works —
+              try reloading, or check the backend health page if it persists.
+            </p>
+            <p className="text-ink-soft text-[11px] mt-1 font-mono break-all">{watchlistError}</p>
+          </div>
+        );
+      }
+      if (lists.length === 0) {
+        return (
+          <>
+            <EmptyState />
+            <CreateWatchlistButton />
+          </>
+        );
+      }
+      return (
         <>
           {lists.map((l) => (
             <WatchlistView key={l.id} list={l} />
           ))}
           <CreateWatchlistButton />
         </>
-      ),
+      );
+    },
   };
 
   return (
