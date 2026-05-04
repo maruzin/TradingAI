@@ -500,6 +500,64 @@ export type TokenProjection = {
   prompt_id: string;
 };
 
+// OHLCV bar — UNIX seconds + numeric OHLCV. Sized for lightweight-charts'
+// CandlestickSeries which expects {time, open, high, low, close}.
+export type OHLCVBar = {
+  t: number;  // UNIX seconds (UTC)
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+};
+
+export type OHLCVResponse = {
+  symbol: string;
+  timeframe: string;
+  bars: OHLCVBar[];
+};
+
+// Pattern overlay payload — every coordinate is a UNIX second so the chart
+// can plot directly on the candlestick series without a second fetch.
+export type PatternHit = {
+  kind: string;          // "double_top", "harmonic_gartley_bull", etc.
+  confidence: number;    // 0..1
+  start_t: number | null;
+  end_t: number | null;
+  target: number | null;
+  notes: string | null;
+};
+
+export type SwingPoint = {
+  t: number;
+  price: number;
+  kind: "high" | "low";
+};
+
+export type DivergenceHit = {
+  kind: string;
+  a_t: number | null;
+  b_t: number | null;
+  confidence: number;
+  notes: string | null;
+};
+
+export type StructureLabel = {
+  sequence: string;
+  last_break: string;
+  trend: "up" | "down" | "range";
+};
+
+export type PatternsResponse = {
+  symbol: string;
+  timeframe: string;
+  last_bar_ts: number | null;
+  swings: SwingPoint[];
+  patterns: PatternHit[];
+  divergences: DivergenceHit[];
+  structure: StructureLabel | null;
+};
+
 export const api = {
   // tokens
   snapshot: (symbol: string) => jsonFetch<TokenSnapshot>(`/tokens/${encodeURIComponent(symbol)}/snapshot`),
@@ -668,6 +726,17 @@ export const api = {
   taSnapshots: (symbol: string, timeframes: string[] = ["1h","3h","6h","12h"]) =>
     jsonFetch<{ symbol: string; snapshots: TASnapshot[] }>(
       `/tokens/${encodeURIComponent(symbol)}/ta?timeframes=${timeframes.join(",")}`
+    ),
+
+  // OHLCV + pattern overlays for the senior pattern chart. The two endpoints
+  // share the same OHLCV window so timestamps line up bar-for-bar.
+  ohlcv: (symbol: string, timeframe = "1d", days = 180) =>
+    jsonFetch<OHLCVResponse>(
+      `/tokens/${encodeURIComponent(symbol)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&days=${days}`
+    ),
+  patterns: (symbol: string, timeframe = "1d", days = 180) =>
+    jsonFetch<PatternsResponse>(
+      `/tokens/${encodeURIComponent(symbol)}/patterns?timeframe=${encodeURIComponent(timeframe)}&days=${days}`
     ),
 
   // Trading-bot decisions

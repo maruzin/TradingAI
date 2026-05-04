@@ -326,6 +326,195 @@ async def get_ta_snapshots(
     return {"symbol": symbol.upper(), "snapshots": rows}
 
 
+# -----------------------------------------------------------------------------
+# OHLCV + patterns — feeds the pattern-overlay chart on the token page
+# -----------------------------------------------------------------------------
+# Map TradingView-style codes (1, 5, 15, 30, 60, 240, D, W) onto the timeframe
+# strings the historical client + analyze() understand. Anything that asks for
+# a sub-hour interval falls back to 1h because the OHLCV cache + pattern
+# detectors are sized for 1h+ bars.
+_TF_ALIAS: dict[str, str] = {
+    "1": "1h", "5": "1h", "15": "1h", "30": "1h",
+    "60": "1h", "1h": "1h",
+    "240": "4h", "4h": "4h",
+    "D": "1d", "1D": "1d", "1d": "1d", "d": "1d",
+    "W": "1d", "1W": "1d",
+    "M": "1d", "1M": "1d",
+}
+
+
+def _normalize_tf(tf: str) -> str:
+    return _TF_ALIAS.get(tf, "1d")
+
+
+async def _load_ohlcv_df(symbol: str, timeframe: str, *, days: int):
+    """Fetch a recent OHLCV window via the multi-exchange fallback chain.
+
+    Returns the pandas DataFrame indexed by UTC timestamp, or None if every
+    exchange failed. Deliberately conservative on `days` so the worst-case
+    path (Binance blocked + Kraken slow) still resolves under ~10s.
+    """
+    from datetime import datetime, timedelta
+
+    from ..services.historical import FetchSpec, HistoricalClient
+
+    pair = f"{symbol.upper()}/USDT" if "/" not in symbol else symbol.upper()
+    until = datetime.now(UTC)
+    since = until - timedelta(days=days)
+    client = HistoricalClient()
+    try:
+        result = await client.fetch_with_fallback(
+            FetchSpec(symbol=pair, timeframe=timeframe, since_utc=since, until_utc=until),
+        )
+    finally:
+        await client.close()
+    if result.df is None or result.df.empty:
+        return None
+    return result.df
+
+
+@router.get("/{symbol}/ohlcv")
+async def get_ohlcv(
+    symbol: str,
+    timeframe: str = Query("1d", description="1h | 4h | 1d (TF-codes 1/5/15/30/60/240/D/W also accepted)"),
+    days: int = Query(180, ge=1, le=1500, description="lookback window in days"),
+) -> dict:
+    """OHLCV candles for the pattern-overlay chart. Public — same data the
+    pattern detector consumes, so the UI can draw exactly what the AI saw.
+
+    Returns ``{symbol, timeframe, bars: [{t, o, h, l, c, v}, ...]}``. Empty
+    ``bars`` (instead of an error) when no exchange in the fallback chain
+    has data — the UI then degrades gracefully.
+    """
+    tf = _normalize_tf(timeframe)
+    try:
+        df = await _load_ohlcv_df(symbol, tf, days=days)
+    except Exception as e:
+        log.warning("tokens.ohlcv_fetch_failed", symbol=symbol, tf=tf, error=str(e))
+        df = None
+
+    bars: list[dict] = []
+    if df is not None and not df.empty:
+        # lightweight-charts wants UNIX seconds. Lower-case columns just in case.
+        df = df.copy()
+        df.columns = [c.lower() for c in df.columns]
+        for ts, row in df.iterrows():
+            bars.append({
+                "t": int(ts.timestamp()),
+                "o": float(row["open"]),
+                "h": float(row["high"]),
+                "l": float(row["low"]),
+                "c": float(row["close"]),
+                "v": float(row.get("volume", 0.0) or 0.0),
+            })
+    return {"symbol": symbol.upper(), "timeframe": tf, "bars": bars}
+
+
+@router.get("/{symbol}/patterns")
+async def get_patterns(
+    symbol: str,
+    timeframe: str = Query("1d"),
+    days: int = Query(180, ge=30, le=1500),
+) -> dict:
+    """Detected pattern hits + swing pivots for overlay rendering.
+
+    Same OHLCV window as ``/ohlcv`` so the timestamps line up bar-for-bar.
+    Returns ``{symbol, timeframe, last_bar_ts, swings, patterns, divergences,
+    structure}`` — lightweight enough to refetch every few minutes.
+
+    Empty arrays when OHLCV is unavailable or the analyzer produced no hits;
+    the UI handles the empty case rather than the API erroring.
+    """
+    from dataclasses import asdict
+
+    from ..services import patterns as patterns_svc
+
+    tf = _normalize_tf(timeframe)
+    try:
+        df = await _load_ohlcv_df(symbol, tf, days=days)
+    except Exception as e:
+        log.warning("tokens.patterns_fetch_failed", symbol=symbol, tf=tf, error=str(e))
+        df = None
+
+    if df is None or df.empty:
+        return {
+            "symbol": symbol.upper(), "timeframe": tf,
+            "last_bar_ts": None,
+            "swings": [], "patterns": [], "divergences": [],
+            "structure": None,
+        }
+
+    try:
+        report = patterns_svc.analyze(df, symbol=symbol.upper(), timeframe=tf)
+    except Exception as e:
+        log.warning("tokens.patterns_analyze_failed", symbol=symbol, tf=tf, error=str(e))
+        return {
+            "symbol": symbol.upper(), "timeframe": tf,
+            "last_bar_ts": int(df.index[-1].timestamp()),
+            "swings": [], "patterns": [], "divergences": [],
+            "structure": None,
+        }
+
+    # Convert internal index-positions to UNIX seconds so the chart can draw
+    # them directly without a second OHLCV fetch.
+    def _ts(idx: int) -> int | None:
+        try:
+            return int(df.index[max(0, min(idx, len(df) - 1))].timestamp())
+        except Exception:
+            return None
+
+    swings = [
+        {
+            "t": int(pd_to_ts(s.ts) or _ts(s.idx) or 0),
+            "price": float(s.price),
+            "kind": s.kind,
+        }
+        for s in report.swings
+    ]
+    patterns = [
+        {
+            "kind": p.kind,
+            "confidence": float(p.confidence),
+            "start_t": _ts(p.start_idx),
+            "end_t": _ts(p.end_idx),
+            "target": float(p.target) if p.target is not None else None,
+            "notes": p.notes,
+        }
+        for p in report.patterns
+    ]
+    divergences = [
+        {
+            "kind": d.kind,
+            "a_t": _ts(d.bar_a_idx),
+            "b_t": _ts(d.bar_b_idx),
+            "confidence": float(d.confidence),
+            "notes": d.notes,
+        }
+        for d in report.divergences
+    ]
+    structure = asdict(report.structure) if report.structure else None
+
+    return {
+        "symbol": symbol.upper(), "timeframe": tf,
+        "last_bar_ts": int(df.index[-1].timestamp()),
+        "swings": swings,
+        "patterns": patterns,
+        "divergences": divergences,
+        "structure": structure,
+    }
+
+
+def pd_to_ts(value) -> int | None:
+    """Best-effort string/Timestamp → UNIX seconds. Returns None on failure."""
+    if value is None:
+        return None
+    try:
+        import pandas as pd
+        return int(pd.Timestamp(value).timestamp())
+    except Exception:
+        return None
+
+
 def _snapshot_dict(snap) -> dict:
     from dataclasses import asdict
     return asdict(snap)

@@ -35,6 +35,25 @@ const TradingViewWidget = nextDynamic(
   },
 );
 
+// PatternChart pulls in lightweight-charts (~45kB) and only matters once the
+// user has scrolled past the TradingView widget. Lazy-load + ssr:false to
+// keep the candle library out of the server bundle and out of the page's
+// first paint.
+const PatternChart = nextDynamic(
+  () => import("@/components/PatternChart").then((m) => m.PatternChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="card flex items-center justify-center text-xs text-ink-muted"
+        style={{ minHeight: 380 }}
+      >
+        loading pattern overlay…
+      </div>
+    ),
+  },
+);
+
 const TF_LS_KEY = "tradingai:tf";
 const VALID_TF = new Set<TFCode>(TF_OPTIONS.map((o) => o.code));
 
@@ -146,6 +165,11 @@ export default function TokenPage() {
           interval={tf}
         />
       </div>
+
+      {/* Pattern overlay — same OHLCV the bot sees, with markers for every
+          detected swing/harmonic/Wyckoff event/divergence. Sits just under
+          TradingView so users can flip between "pretty" and "what the AI saw". */}
+      <PatternChart symbol={(snap.data?.symbol || symbol).toUpperCase()} />
 
       {/* Visual buy/sell gauge + concrete trade plan, side-by-side on
           desktop, stacked on mobile. */}
