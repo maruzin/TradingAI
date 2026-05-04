@@ -1,15 +1,31 @@
 "use client";
+/**
+ * Dashboard — primary signed-in surface + demo fallback for anonymous users.
+ *
+ * Phase-3 Round B: composed from `components/ui` primitives (Card, Button,
+ * Input, Badge, EmptyState, ErrorState, LoadingState) instead of inline
+ * Tailwind. The visual identity stays the same — it's a one-pass code
+ * cleanup that gives the entire page consistent focus rings, button
+ * states, error chrome, etc.
+ *
+ * Phase-4: each watchlist now opens with a row of MiniMeters (15-min
+ * cadence), giving the user a one-glance pressure read across every
+ * watched token before they click into the deep-dive page.
+ */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { Plus, Trash2, History } from "lucide-react";
+
 import { TokenCard } from "@/components/TokenCard";
 import { Disclaimer } from "@/components/Disclaimer";
 import { CalibrationHero } from "@/components/CalibrationHero";
 import { SectorTile } from "@/components/SectorTile";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { MiniMeter } from "@/components/MiniMeter";
+import { Button, Card, Input, EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { api, type Watchlist } from "@/lib/api";
-import { Plus, Trash2, History } from "lucide-react";
-import Link from "next/link";
 import {
   useRefreshIntervals,
   toRefetchInterval,
@@ -52,7 +68,7 @@ export default function Home() {
   if (auth.loading) {
     return (
       <div className="space-y-6">
-        <div className="card text-sm text-ink-muted">restoring session…</div>
+        <Card density="compact"><LoadingState density="compact" caption="Restoring session…" /></Card>
       </div>
     );
   }
@@ -68,20 +84,24 @@ export default function Home() {
     return (
       <div className="space-y-6">
         <section>
-          <h1 className="text-xl font-semibold tracking-tight">Watchlist (demo)</h1>
-          <p className="text-sm text-ink-muted">
+          <h1 className="text-h1 text-ink">Watchlist (demo)</h1>
+          <p className="text-caption text-ink-muted mt-1">
             You&apos;re not signed in. Showing the default top-cap watchlist.{" "}
-            <a href="/login" className="text-accent underline-offset-2 hover:underline">Sign in</a>{" "}
+            <Link href="/login" className="text-accent underline-offset-2 hover:underline">Sign in</Link>{" "}
             to save your own.
           </p>
         </section>
         {markets.isLoading && (
-          <div className="card text-sm text-ink-muted">loading top markets…</div>
+          <Card><LoadingState layout="skeleton-card" rows={3} caption="Loading top markets…" /></Card>
         )}
         {markets.error && (
-          <div className="card text-sm text-bear">
-            <b>Backend unreachable.</b> {String(markets.error.message).slice(0, 200)}
-          </div>
+          <Card emphasis="bear">
+            <ErrorState
+              title="Backend unreachable"
+              description={String(markets.error.message).slice(0, 200)}
+              onRetry={() => markets.refetch()}
+            />
+          </Card>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {ordered.map((c) => (
@@ -106,10 +126,6 @@ export default function Home() {
   }
 
   const lists = wl.data ?? [];
-  // The watchlists endpoint is allowed to fail independently of auth — DB
-  // hiccup, RLS misfire, etc. Show a specific error so the rest of the
-  // dashboard still renders (sector tile, activity feed, etc. don't depend
-  // on watchlists).
   const watchlistError = wl.error
     ? String((wl.error as Error).message ?? wl.error).slice(0, 240)
     : null;
@@ -121,7 +137,7 @@ export default function Home() {
       lastToken ? (
         <Link
           href={`/token/${lastToken.toLowerCase()}`}
-          className="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-accent border border-line rounded-full px-3 py-1 transition-colors"
+          className="inline-flex items-center gap-2 text-caption text-ink-muted hover:text-accent border border-line rounded-full px-3 py-1 transition-colors"
         >
           <History className="size-3" />
           Resume on {lastToken.toUpperCase()}
@@ -132,24 +148,24 @@ export default function Home() {
     activity: () => <ActivityFeed />,
     watchlists: () => {
       if (wl.isLoading) {
-        return <div className="card text-sm text-ink-muted">loading watchlists…</div>;
+        return <Card><LoadingState layout="skeleton-card" caption="Loading watchlists…" /></Card>;
       }
       if (watchlistError) {
         return (
-          <div className="card text-sm">
-            <h2 className="font-medium text-warn">Watchlists unavailable</h2>
-            <p className="text-ink-muted text-xs mt-1">
-              The watchlists API errored. The rest of the dashboard still works —
-              try reloading, or check the backend health page if it persists.
-            </p>
-            <p className="text-ink-soft text-[11px] mt-1 font-mono break-all">{watchlistError}</p>
-          </div>
+          <Card emphasis="warn">
+            <ErrorState
+              title="Watchlists unavailable"
+              description="The watchlists API errored. The rest of the dashboard still works — try reloading, or check the backend health page if it persists."
+              onRetry={() => wl.refetch()}
+            />
+            <p className="mt-3 text-micro text-ink-soft font-mono break-all">{watchlistError}</p>
+          </Card>
         );
       }
       if (lists.length === 0) {
         return (
           <>
-            <EmptyState />
+            <OnboardingPanel />
             <CreateWatchlistButton />
           </>
         );
@@ -197,118 +213,158 @@ function WatchlistView({ list }: { list: Watchlist }) {
     mutationFn: (tokenId: string) => api.removeWatchlistItem(list.id, tokenId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlists"] }),
   });
+
+  const items = list.items ?? [];
+
   return (
     <section className="space-y-3">
-      <header className="flex items-center justify-between">
-        <h2 className="font-semibold">{list.name}</h2>
+      <header className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-h3 text-ink">{list.name}</h2>
         <form
           onSubmit={(e) => { e.preventDefault(); if (token.trim()) add.mutate(token.trim()); }}
           className="flex items-center gap-2"
         >
-          <input
-            value={token} onChange={(e) => setToken(e.target.value)}
+          <Input
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
             placeholder="add ticker / id / 0x…"
-            className="rounded-md border border-line bg-bg-subtle px-2 py-1 text-xs font-mono"
+            inputSize="sm"
+            className="font-mono w-44"
+            error={add.error ? String(add.error.message).slice(0, 80) : undefined}
           />
-          <button type="submit" className="rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-xs hover:bg-accent/20" disabled={add.isPending}>
-            <Plus className="size-3 inline mr-1" /> Add
-          </button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={add.isPending}
+            loading={add.isPending}
+            leftIcon={<Plus aria-hidden />}
+          >
+            Add
+          </Button>
         </form>
       </header>
-      {add.error && <p className="text-bear text-xs">{String(add.error.message).slice(0, 200)}</p>}
+
+      {/* Phase-4 watchlist meter strip — one MiniMeter per token, scrollable
+          on narrow screens. Renders skeletons while each meter loads, never
+          blocks the TokenCard grid below. */}
+      {items.length > 0 && (
+        <div className="-mx-1 overflow-x-auto scroll-snap-x">
+          <div className="flex gap-2 px-1 py-1">
+            {items.map((it) => (
+              <MiniMeter key={`mini-${it.id}`} symbol={it.symbol} />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {(list.items ?? []).map((it) => (
+        {items.map((it) => (
           <div key={it.id} className="relative">
             <TokenCard symbol={it.coingecko_id || it.symbol} />
             <button
               onClick={() => remove.mutate(it.id)}
-              className="absolute top-2 right-8 text-ink-soft hover:text-bear"
+              className={
+                "absolute top-2 right-8 text-ink-soft hover:text-bear " +
+                "focus-visible:outline-none focus-visible:shadow-focus rounded-sm"
+              }
               title="Remove"
+              aria-label={`Remove ${it.symbol}`}
             >
               <Trash2 className="size-3.5" />
             </button>
           </div>
         ))}
-        {(list.items ?? []).length === 0 && (
-          <p className="text-sm text-ink-soft col-span-full">empty — add a token above</p>
+        {items.length === 0 && (
+          <Card density="compact" interactive={false} className="col-span-full">
+            <EmptyState
+              title="Empty watchlist"
+              description="Add a token above to start tracking — paste a ticker, CoinGecko id, or contract address."
+              density="compact"
+            />
+          </Card>
         )}
       </div>
     </section>
   );
 }
 
-function EmptyState() {
+// Renamed from EmptyState so it doesn't shadow the primitive imported above.
+function OnboardingPanel() {
   const qc = useQueryClient();
   const create = useMutation({
     mutationFn: () => api.createWatchlist("Core"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlists"] }),
   });
   return (
-    <section className="card space-y-4">
-      <header>
-        <h2 className="font-semibold">Welcome to TradingAI 👋</h2>
-        <p className="text-sm text-ink-muted">
-          Three steps to get value within five minutes.
-        </p>
-      </header>
-      <ol className="space-y-3 text-sm">
-        <li className="flex gap-3">
-          <Step n={1} />
-          <div className="flex-1">
-            <p className="font-medium">Create your first watchlist</p>
-            <p className="text-xs text-ink-muted">
-              Group the tokens you actually care about so the daily picks +
-              setup watcher prioritise them.
-            </p>
-            <button
-              onClick={() => create.mutate()}
-              disabled={create.isPending}
-              className="mt-2 rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs hover:bg-accent/20 disabled:opacity-50"
-            >
-              {create.isPending ? "Creating…" : "Create \"Core\" watchlist"}
-            </button>
-          </div>
-        </li>
-        <li className="flex gap-3">
-          <Step n={2} />
-          <div className="flex-1">
-            <p className="font-medium">Generate your first 5-dimension brief</p>
-            <p className="text-xs text-ink-muted">
-              Pick a token from the watchlist and the analyst pulls news,
-              sentiment, on-chain, technical, and macro in one go.
-            </p>
-            <a
-              href="/token/bitcoin"
-              className="mt-2 inline-block rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent/50"
-            >
-              Try BTC →
-            </a>
-          </div>
-        </li>
-        <li className="flex gap-3">
-          <Step n={3} />
-          <div className="flex-1">
-            <p className="font-medium">Link Telegram for alerts</p>
-            <p className="text-xs text-ink-muted">
-              Big wallet moves, setup configurations, and your daily morning
-              brief land in your DMs.
-            </p>
-            <a
-              href="/settings"
-              className="mt-2 inline-block rounded-md border border-line px-3 py-1.5 text-xs hover:border-accent/50"
-            >
-              Go to Settings →
-            </a>
-          </div>
-        </li>
-      </ol>
-    </section>
+    <Card>
+      <Card.Header
+        title="Welcome to TradingAI 👋"
+        subtitle="Three steps to get value within five minutes."
+      />
+      <Card.Body>
+        <ol className="space-y-3">
+          <li className="flex gap-3">
+            <Step n={1} />
+            <div className="flex-1">
+              <p className="text-caption font-semibold text-ink">Create your first watchlist</p>
+              <p className="text-caption text-ink-muted mt-0.5">
+                Group the tokens you actually care about so the daily picks +
+                setup watcher prioritise them.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                className="mt-2"
+                onClick={() => create.mutate()}
+                disabled={create.isPending}
+                loading={create.isPending}
+              >
+                {create.isPending ? "Creating…" : 'Create "Core" watchlist'}
+              </Button>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <Step n={2} />
+            <div className="flex-1">
+              <p className="text-caption font-semibold text-ink">Generate your first 5-dimension brief</p>
+              <p className="text-caption text-ink-muted mt-0.5">
+                Pick a token from the watchlist and the analyst pulls news,
+                sentiment, on-chain, technical, and macro in one go.
+              </p>
+              <Link
+                href="/token/bitcoin"
+                className="mt-2 inline-flex items-center h-7 px-2.5 rounded-md border border-line text-caption hover:border-accent/50 transition-colors"
+              >
+                Try BTC →
+              </Link>
+            </div>
+          </li>
+          <li className="flex gap-3">
+            <Step n={3} />
+            <div className="flex-1">
+              <p className="text-caption font-semibold text-ink">Link Telegram for alerts</p>
+              <p className="text-caption text-ink-muted mt-0.5">
+                Big wallet moves, setup configurations, and your daily morning
+                brief land in your DMs.
+              </p>
+              <Link
+                href="/settings"
+                className="mt-2 inline-flex items-center h-7 px-2.5 rounded-md border border-line text-caption hover:border-accent/50 transition-colors"
+              >
+                Go to Settings →
+              </Link>
+            </div>
+          </li>
+        </ol>
+      </Card.Body>
+    </Card>
   );
 }
 
 function Step({ n }: { n: number }) {
   return (
-    <span className="size-7 shrink-0 rounded-full border border-accent/40 bg-accent/10 text-accent text-xs font-mono flex items-center justify-center">
+    <span className="size-7 shrink-0 rounded-full border border-accent/40 bg-accent/10 text-accent text-caption font-mono flex items-center justify-center">
       {n}
     </span>
   );
@@ -326,13 +382,23 @@ function CreateWatchlistButton() {
       onSubmit={(e) => { e.preventDefault(); if (name.trim()) create.mutate(); }}
       className="flex items-center gap-2"
     >
-      <input
-        value={name} onChange={(e) => setName(e.target.value)} placeholder="new watchlist name"
-        className="rounded-md border border-line bg-bg-subtle px-2 py-1 text-sm"
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="new watchlist name"
+        inputSize="sm"
+        className="w-56"
       />
-      <button type="submit" className="rounded-md border border-line px-2 py-1 text-sm hover:border-accent/50" disabled={create.isPending || !name}>
-        + New watchlist
-      </button>
+      <Button
+        type="submit"
+        variant="secondary"
+        size="sm"
+        disabled={create.isPending || !name.trim()}
+        loading={create.isPending}
+        leftIcon={<Plus aria-hidden />}
+      >
+        New watchlist
+      </Button>
     </form>
   );
 }

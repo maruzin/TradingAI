@@ -2,14 +2,16 @@
 import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import clsx from "clsx";
+import { Play, Loader2 } from "lucide-react";
 import { api, type DailyPick } from "@/lib/api";
 import { fmtUsd } from "@/lib/format";
 import { Disclaimer } from "@/components/Disclaimer";
+import { Button, Card, Badge, ErrorState, LoadingState } from "@/components/ui";
 
-const DIR_COLOR: Record<string, string> = {
-  long: "border-bull/40 text-bull",
-  short: "border-bear/40 text-bear",
-  neutral: "border-line text-ink-soft",
+const DIR_TONE: Record<string, "bull" | "bear" | "neutral"> = {
+  long: "bull",
+  short: "bear",
+  neutral: "neutral",
 };
 
 const DIR_LABEL: Record<string, string> = {
@@ -41,62 +43,83 @@ export default function PicksPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex items-end justify-between">
+      <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Daily Top-10</h1>
-          <p className="text-sm text-ink-muted">
+          <h1 className="text-h1 text-ink">Daily Top-10</h1>
+          <p className="text-caption text-ink-muted mt-1 max-w-2xl">
             Composite-scored long/short candidates from the universe. Auto-runs
             on first visit each day (also on a 07:00 UTC cron). Each pick has
             an ATR-based stop and target, plus a full 5-dimension brief.
           </p>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="md"
           onClick={() => runNow.mutate()}
           disabled={runNow.isPending || isRunning}
-          className="rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-sm hover:bg-accent/20 disabled:opacity-50"
+          loading={runNow.isPending || isRunning}
+          leftIcon={<Play aria-hidden />}
         >
           {runNow.isPending || isRunning ? "Running…" : "Run now (admin)"}
-        </button>
+        </Button>
       </header>
 
       {q.error && (
-        <div className="card text-ink-muted">
-          <p>Couldn&apos;t reach the picks store.</p>
-          <p className="text-xs mt-2 text-bear">{String(q.error.message).slice(0, 200)}</p>
-        </div>
+        <Card emphasis="bear">
+          <ErrorState
+            title="Couldn't reach the picks store"
+            description={String(q.error.message).slice(0, 200)}
+            onRetry={() => q.refetch()}
+          />
+        </Card>
+      )}
+
+      {q.isLoading && !q.data && (
+        <Card><LoadingState layout="skeleton-card" rows={4} caption="Loading today's run…" /></Card>
       )}
 
       {isRunning && (
-        <section className="card border-accent/40">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="size-2 rounded-full bg-accent animate-pulse" />
-            <h2 className="font-medium">
-              Generating today&apos;s top-10 — typically 2–5 minutes
-            </h2>
-          </div>
-          <p className="text-sm text-ink-muted">
-            Scoring ~30 tokens across every classical strategy, then writing
-            briefs for the top 5. This page polls every 15 seconds; results
-            will appear automatically.
-          </p>
-          {q.data?.notes && (
-            <p className="text-xs text-ink-soft mt-2">{q.data.notes}</p>
-          )}
-        </section>
+        <Card emphasis="accent">
+          <Card.Header
+            icon={<Loader2 className="animate-spin" aria-hidden />}
+            title="Generating today's top-10 — typically 2–5 minutes"
+          />
+          <Card.Body>
+            <p className="text-caption text-ink-muted">
+              Scoring ~30 tokens across every classical strategy, then writing
+              briefs for the top 5. This page polls every 15 seconds; results
+              will appear automatically.
+            </p>
+            {q.data?.notes && (
+              <p className="text-micro text-ink-soft mt-2">{q.data.notes}</p>
+            )}
+          </Card.Body>
+        </Card>
       )}
 
       {q.data && (
         <>
-          <section className="card flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-ink-muted">
-            <span>Run: <span className="text-ink font-mono">{q.data.run_date}</span></span>
-            <span>Status: {q.data.status}</span>
-            <span>Scanned: {q.data.n_scanned}</span>
-            <span>Picked: {q.data.n_picked}</span>
-            {q.data.finished_at && <span>Finished: {q.data.finished_at}</span>}
-            {q.data.notes && !isRunning && <span className="text-ink-soft">{q.data.notes}</span>}
-          </section>
+          <Card density="compact" interactive={false}>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-caption text-ink-muted">
+              <span>Run: <span className="text-ink font-mono">{q.data.run_date}</span></span>
+              <span>Status: <Badge tone={isRunning ? "warn" : isCompleted ? "bull" : "neutral"} size="sm">{q.data.status}</Badge></span>
+              <span>Scanned: <span className="text-ink tabular-nums">{q.data.n_scanned}</span></span>
+              <span>Picked: <span className="text-ink tabular-nums">{q.data.n_picked}</span></span>
+              {q.data.finished_at && <span>Finished: <span className="font-mono">{q.data.finished_at}</span></span>}
+              {q.data.notes && !isRunning && <span className="text-ink-soft">{q.data.notes}</span>}
+            </div>
+          </Card>
 
-          {isCompleted && (
+          {isCompleted && (q.data.picks ?? []).length === 0 && (
+            <Card>
+              <ErrorState
+                title="Today's run completed with no picks"
+                description="The composite score didn't clear the minimum threshold for any token in the universe. Try again tomorrow or run manually if you have admin access."
+              />
+            </Card>
+          )}
+
+          {isCompleted && (q.data.picks ?? []).length > 0 && (
             <section className="grid gap-3 sm:grid-cols-2">
               {(q.data.picks ?? []).map((p) => <PickCard key={p.rank} p={p} />)}
             </section>
@@ -117,44 +140,44 @@ function PickCard({ p }: { p: DailyPick }) {
   return (
     <Link
       href={`/token/${symbolPath}`}
-      className="card hover:border-accent/50 transition flex flex-col gap-2"
+      className="rounded-xl border border-line bg-bg-soft p-4 shadow-subtle transition-colors duration-fast hover:border-accent/50 flex flex-col gap-2"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs font-mono">
-            #{p.rank}
-          </span>
-          <span className="font-semibold">{p.pair}</span>
-          <span className={clsx("chip text-xs", DIR_COLOR[p.direction])}>
+          <Badge tone="neutral" size="sm" className="font-mono">#{p.rank}</Badge>
+          <span className="text-h4 text-ink">{p.pair}</span>
+          <Badge tone={DIR_TONE[p.direction] ?? "neutral"} size="sm">
             {DIR_LABEL[p.direction]}
-          </span>
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-lg tabular-nums">
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-mono text-h3 tabular-nums">
             {p.composite_score.toFixed(1)}
           </span>
-          <span className="text-xs text-ink-soft">/10</span>
+          <span className="text-micro text-ink-soft">/10</span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between text-xs text-ink-muted">
-        {p.last_price && <span>price {fmtUsd(p.last_price)}</span>}
+      <div className="flex flex-wrap items-center justify-between text-caption text-ink-muted">
+        {p.last_price && <span>price <span className="font-mono tabular-nums">{fmtUsd(p.last_price)}</span></span>}
         {p.suggested_stop && p.suggested_target && (
           <span>
-            stop {fmtUsd(p.suggested_stop)} · target {fmtUsd(p.suggested_target)}
+            stop <span className="font-mono tabular-nums">{fmtUsd(p.suggested_stop)}</span>
+            <span className="mx-1">·</span>
+            target <span className="font-mono tabular-nums">{fmtUsd(p.suggested_target)}</span>
           </span>
         )}
         {p.risk_reward && (
-          <span className="text-ink">RR {p.risk_reward}</span>
+          <span className="text-ink">RR <span className="font-mono tabular-nums">{p.risk_reward}</span></span>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-1 text-[10px]">
+      <div className="grid grid-cols-3 gap-1 text-micro">
         {componentsArray.map(([k, v]) => (
           <div key={k} className="rounded bg-bg-subtle px-1.5 py-0.5 flex justify-between">
             <span className="text-ink-soft">{k}</span>
             <span className={clsx(
-              "font-mono",
+              "font-mono tabular-nums",
               v > 0.5 ? "text-bull" : v > 0 ? "text-ink" : "text-ink-soft",
             )}>{v}</span>
           </div>
@@ -162,13 +185,13 @@ function PickCard({ p }: { p: DailyPick }) {
       </div>
 
       {rationale.length > 0 && (
-        <ul className="text-xs text-ink-muted list-disc pl-4">
+        <ul className="text-caption text-ink-muted list-disc pl-4 space-y-0.5">
           {rationale.slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
         </ul>
       )}
 
       {p.brief_id && (
-        <span className="text-[10px] text-accent">📄 full brief attached</span>
+        <span className="text-micro text-accent">📄 full brief attached</span>
       )}
     </Link>
   );
