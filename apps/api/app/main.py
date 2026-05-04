@@ -26,6 +26,7 @@ from .routes import (
     health,
     markets,
     me,
+    meter,
     picks,
     portfolio,
     regime,
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(correlation.router, prefix="/api/correlation", tags=["correlation"])
     app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
     app.include_router(ev.router, prefix="/api/ev", tags=["ev"])
+    app.include_router(meter.router, prefix="/api/meter", tags=["meter"])
 
     return app
 

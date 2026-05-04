@@ -830,4 +830,48 @@ export const api = {
       }>;
     }>(`/signals${qs.toString() ? `?${qs}` : ""}`);
   },
+
+  // Phase-4: Buy/Sell pressure meter (15-min cadence). Backed by the
+  // meter_refresher cron + meter_ticks table; falls back to the latest
+  // bot_decision when no ticks have been written yet for the symbol.
+  meter: (symbol: string) => jsonFetch<MeterEnvelope>(`/meter/${encodeURIComponent(symbol)}`),
+};
+
+export type MeterBand =
+  | "strong_sell"
+  | "sell"
+  | "neutral"
+  | "buy"
+  | "strong_buy";
+
+export type MeterConfidence = "low" | "med" | "high";
+
+export type MeterComponent = {
+  name: string;
+  signal: number;        // -1..+1
+  weight: number;        // 0..1
+  contribution: number;  // signal * weight
+};
+
+export type MeterHistoryPoint = {
+  at: string;            // ISO timestamp
+  value: number;         // -100..+100
+  band: MeterBand | null;
+};
+
+export type MeterEnvelope = {
+  symbol: string;
+  value: number;                    // -100..+100, positive = buy bias
+  band: MeterBand;
+  band_label: string;               // "Strong Buy" / "Buy" / "Neutral" / ...
+  confidence: MeterConfidence;
+  confidence_score: number | null;  // 0..1
+  raw_score: number | null;         // 0..10 from bot_decider
+  components: MeterComponent[];
+  weights: Record<string, number>;
+  updated_at: string;
+  next_update_at: string;
+  stale: boolean;
+  history: MeterHistoryPoint[];
+  source: "meter_ticks" | "bot_decisions" | "empty";
 };

@@ -11,8 +11,8 @@ import { TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
 import { ShareBrief } from "@/components/ShareBrief";
 import { TAPanel } from "@/components/TAPanel";
 import { BotVerdictCard } from "@/components/BotVerdictCard";
-import { TradeMeter } from "@/components/TradeMeter";
 import { TradePlanCard } from "@/components/TradePlanCard";
+import { MeterCard } from "@/components/MeterCard";
 import { usePrefs } from "@/lib/prefs";
 import clsx from "clsx";
 
@@ -130,8 +130,9 @@ export default function TokenPage() {
     retry: 0,
   });
 
-  // Bot decision feeds the TradeMeter + TradePlanCard. Updated hourly by the
-  // bot_decider worker; we cache for 5 min on the client.
+  // Bot decision feeds TradePlanCard. The TradeMeter is now embedded inside
+  // <MeterCard> which fetches its own /api/meter/{symbol} envelope at 15-min
+  // cadence, so we no longer derive a meter score here.
   const botDecision = useQuery({
     queryKey: ["bot-decision", symbol],
     queryFn: () => api.botLatest(symbol),
@@ -141,9 +142,6 @@ export default function TokenPage() {
   });
 
   const decision = botDecision.data?.decision ?? null;
-  const meterScore = decision
-    ? (decision.composite_score ?? 5) * 10
-    : 50;
 
   return (
     <div className="space-y-5">
@@ -171,30 +169,25 @@ export default function TokenPage() {
           TradingView so users can flip between "pretty" and "what the AI saw". */}
       <PatternChart symbol={(snap.data?.symbol || symbol).toUpperCase()} />
 
-      {/* Visual buy/sell gauge + concrete trade plan, side-by-side on
-          desktop, stacked on mobile. */}
-      <section className="grid gap-3 md:grid-cols-[auto,1fr] items-stretch">
-        <div className="card flex flex-col items-center justify-center px-6">
-          <TradeMeter
-            score={meterScore}
-            confidence={decision?.confidence ?? 0.4}
-            size="md"
-            label="Bot signal"
-          />
+      {/* Phase-4 Buy/Sell pressure meter — 15-minute cadence, includes the
+          gauge, per-component decomposition bar, 24h sparkline, and a
+          "next update in N min" countdown. Trade plan sits below it,
+          driven by the same hourly bot decision that fed the meter's
+          last "deep" inputs (sentiment, ML, on-chain). */}
+      <MeterCard symbol={(snap.data?.symbol || symbol).toUpperCase()} />
+
+      {decision ? (
+        <TradePlanCard decision={decision} />
+      ) : (
+        <div className="card text-sm text-ink-muted">
+          <h2 className="font-medium">Trade plan</h2>
+          <p className="mt-1 text-xs">
+            Bot decision worker hasn&apos;t produced a verdict for this token
+            yet — runs every hour at minute :25 (and you can also visit
+            <code className="font-mono mx-1">/admin/health</code> to confirm).
+          </p>
         </div>
-        {decision ? (
-          <TradePlanCard decision={decision} />
-        ) : (
-          <div className="card text-sm text-ink-muted">
-            <h2 className="font-medium">Trade plan</h2>
-            <p className="mt-1 text-xs">
-              Bot decision worker hasn&apos;t produced a verdict for this token
-              yet — runs every hour at minute :25 (and you can also visit
-              <code className="font-mono mx-1">/admin/health</code> to confirm).
-            </p>
-          </div>
-        )}
-      </section>
+      )}
 
       <BotVerdictCard symbol={(snap.data?.symbol || symbol).toUpperCase()} />
 

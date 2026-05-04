@@ -29,6 +29,7 @@ from . import (
     daily_morning,
     daily_picks,
     gossip_poller,
+    meter_refresher,
     predictor_trainer,
     price_poller,
     setup_watcher,
@@ -65,6 +66,11 @@ class WorkerSettings:
         cron(ta_snapshotter.run_12h,  hour={i for i in range(0, 24) if i % 12 == 0}, minute={20}),
         # Trading bot — fuses TA + sentiment + on-chain + ML forecast every hour.
         cron(bot_decider.run,         minute={25}),
+        # Buy/Sell pressure meter — denser 15-min cadence for the dashboard
+        # gauge + sparkline. Re-uses bot_decider.fuse() under the hood with
+        # fresh regime + TA inputs and inherited sentiment/funding/ML from
+        # the latest hourly bot decision.
+        cron(meter_refresher.run,     minute={i for i in range(0, 60) if i % 15 == 0}),
         cron(thesis_tracker.run,      minute={7}),
         cron(daily_digest.run,        hour={9}, minute={0}),
         cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks
