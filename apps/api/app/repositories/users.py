@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -45,7 +45,7 @@ async def upsert_profile(
 # -----------------------------------------------------------------------------
 async def mint_telegram_link_code(user_id: str, *, ttl_minutes: int = 30) -> str:
     code = secrets.token_urlsafe(8)
-    expires = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+    expires = datetime.now(UTC) + timedelta(minutes=ttl_minutes)
     await db.execute(
         """
         insert into telegram_link_codes (code, user_id, expires_at)
@@ -100,8 +100,7 @@ async def get_flag(key: str) -> Any:
     row = await db.fetchrow("select value from system_flags where key = $1", key)
     if not row:
         return None
-    v = row["value"]
-    return v
+    return row["value"]
 
 
 async def set_flag(key: str, value: Any) -> None:

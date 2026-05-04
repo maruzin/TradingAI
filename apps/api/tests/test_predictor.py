@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from app.services.predictor import _engineer_features, _make_labels, HORIZON_BARS
+from app.services.predictor import HORIZON_BARS, _engineer_features, _make_labels
 
 
 def _ohlcv(n: int = 300) -> pd.DataFrame:

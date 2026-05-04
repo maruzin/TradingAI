@@ -7,9 +7,8 @@ so no real network calls happen — this is what makes the suite runnable in CI.
 from __future__ import annotations
 
 import os
-from typing import Iterator
+from collections.abc import Iterator
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,7 +23,10 @@ os.environ["ALLOW_DEV_AUTH"] = "true"     # required by hardened auth.py
 # Settings is lru_cached on first read — clear it so the env above takes effect
 # even if some other module imported settings during test discovery.
 from app import settings as _settings_mod  # noqa: E402
+
 _settings_mod.get_settings.cache_clear()
+
+import contextlib
 
 from app.main import create_app  # noqa: E402
 
@@ -48,8 +50,8 @@ def auth_headers() -> dict[str, str]:
 @pytest.fixture
 def mock_coingecko(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub CoinGeckoClient.snapshot to avoid hitting the real API."""
+
     from app.services import coingecko as cg
-    from dataclasses import asdict
 
     sample = cg.TokenSnapshot(
         coingecko_id="bitcoin", symbol="btc", name="Bitcoin",
@@ -139,10 +141,8 @@ content (CPI, Fed funds, SPX, oil)
     # analyst.py and projection.py import get_provider by name, so the patch
     # has to land on the consumer modules too.
     monkeypatch.setattr("app.agents.analyst.get_provider", lambda settings=None: stub)
-    try:
+    with contextlib.suppress(AttributeError, ImportError):
         monkeypatch.setattr("app.agents.projection.get_provider", lambda settings=None: stub)
-    except (AttributeError, ImportError):
-        pass
 
 
 @pytest.fixture
@@ -200,8 +200,9 @@ def mock_onchain(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def mock_historical(monkeypatch: pytest.MonkeyPatch) -> None:
     """Returns an empty OHLCV frame so analyst skips indicators/patterns."""
-    from app.services import historical
     import pandas as pd
+
+    from app.services import historical
 
     async def fake_fetch(self, spec, page_limit=1000):  # noqa: ARG002
         return historical.FetchResult(spec=spec, rows=0, first_ts=None, last_ts=None,
@@ -219,7 +220,7 @@ def mock_historical(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def all_mocks(mock_coingecko, mock_llm, mock_macro, mock_news, mock_sentiment, mock_onchain, mock_historical) -> None:
     """Convenience fixture: stub every external dependency at once."""
-    return None
+    return
 
 
 # Stub the DB layer when no Postgres is available — repos return empty lists,

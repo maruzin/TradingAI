@@ -10,7 +10,7 @@ backend lean and deterministic.
 """
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from .engine import BacktestResult
 

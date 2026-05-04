@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
 
@@ -91,7 +90,7 @@ async def verify_jwt(token: str) -> CurrentUser | None:
     return user
 
 
-def _from_cache(token: str) -> Optional[CurrentUser]:
+def _from_cache(token: str) -> CurrentUser | None:
     if (entry := _CACHE.get(token)) is None:
         return None
     ts, user = entry

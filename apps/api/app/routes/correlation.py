@@ -7,10 +7,9 @@ panel to surface "your watchlist is one BTC bet wearing four jerseys".
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Query
 
@@ -30,7 +29,7 @@ async def get_correlation(
     if not bases:
         return {"symbols": [], "matrix": [], "window_days": days}
     pairs = [f"{b}/USDT" for b in bases]
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=days * 2)  # buffer for missing days
 
     h = HistoricalClient()
@@ -52,7 +51,7 @@ async def get_correlation(
                     return
                 series_by_sym[sym] = fr.df["close"].astype(float).pct_change()
 
-        await asyncio.gather(*[_one(p, b) for p, b in zip(pairs, bases)])
+        await asyncio.gather(*[_one(p, b) for p, b in zip(pairs, bases, strict=False)])
     finally:
         await h.close()
 

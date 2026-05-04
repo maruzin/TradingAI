@@ -102,8 +102,8 @@ def classify(df: pd.DataFrame, *, lookback: int = 60) -> WyckoffSnapshot:
         (low - close.shift()).abs(),
     ], axis=1).max(axis=1)
     atr = tr.rolling(14).mean()
-    atr_now = float(atr.iloc[-1] or 0.0)
-    atr_pctile = float((atr.dropna().rank(pct=True).iloc[-1] or 0.5))
+    float(atr.iloc[-1] or 0.0)
+    atr_pctile = float(atr.dropna().rank(pct=True).iloc[-1] or 0.5)
 
     # --- Trend strength via 30/90 SMA cross + slope of 20MA over the window ---
     sma_short = close.rolling(20).mean()

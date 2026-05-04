@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -78,7 +78,7 @@ async def compute_for(
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]
 
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=int(365 * years))
     h = HistoricalClient()
     try:
@@ -91,7 +91,7 @@ async def compute_for(
 
     if fr.df.empty or len(fr.df) < 250:
         return EVTable(pair=pair, timeframe=timeframe, years=years, rows=[],
-                        computed_at=datetime.now(timezone.utc).isoformat())
+                        computed_at=datetime.now(UTC).isoformat())
 
     df = fr.df.copy()
     high = df["high"].astype(float)
@@ -177,7 +177,7 @@ async def compute_for(
     table = EVTable(
         pair=pair, timeframe=timeframe, years=years,
         rows=rows,
-        computed_at=datetime.now(timezone.utc).isoformat(),
+        computed_at=datetime.now(UTC).isoformat(),
     )
     _CACHE[key] = (time.time(), table)
     return table

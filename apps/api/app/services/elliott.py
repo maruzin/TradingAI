@@ -121,10 +121,7 @@ def _try_impulse(pts: list[Swing]) -> ElliottSnapshot | None:
     # Rule 2: wave 3 not the shortest of 1/3/5
     rule_w3_not_shortest = w3 > w1 or w3 > w5  # i.e., w3 not strictly the smallest
     # Rule 3: wave 4 doesn't overlap wave 1 (in impulse direction)
-    if going_up:
-        rule_w4_no_overlap = p4.price > p1.price
-    else:
-        rule_w4_no_overlap = p4.price < p1.price
+    rule_w4_no_overlap = p4.price > p1.price if going_up else p4.price < p1.price
 
     fib3 = w3 / w1 if w1 else None
     fib5 = w5 / w1 if w1 else None

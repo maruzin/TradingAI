@@ -7,10 +7,8 @@ crypto risk-on / risk-off sentiment.
 """
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import httpx
 
@@ -63,7 +61,7 @@ class GdeltClient:
         await self.client.aclose()
 
     async def recent_high_impact(self, *, hours: int = 24, max_records: int = 25) -> GeoBundle:
-        bundle = GeoBundle(fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        bundle = GeoBundle(fetched_at=datetime.now(UTC).isoformat(timespec="seconds"))
         # GDELT's "themes" parameter accepts OR-joined themes. We sort by tone (negative → high
         # impact) and timespan to last N hours.
         themes = " OR ".join(f"theme:{t}" for t in DEFAULT_THEMES)
@@ -89,7 +87,7 @@ class GdeltClient:
                 pub_raw = str(art.get("seendate", ""))
                 # GDELT format: YYYYMMDDTHHMMSSZ
                 pub = (datetime.strptime(pub_raw, "%Y%m%dT%H%M%SZ")
-                       .replace(tzinfo=timezone.utc).isoformat()) if pub_raw else ""
+                       .replace(tzinfo=UTC).isoformat()) if pub_raw else ""
                 bundle.events.append(GeoEventItem(
                     title=art.get("title", ""),
                     url=art.get("url", ""),

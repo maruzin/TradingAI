@@ -12,10 +12,9 @@ global feed.
 """
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -91,7 +90,7 @@ class CryptoPanicClient:
         if not self.settings.cryptopanic_api_key:
             bundle = NewsBundle(
                 token=",".join(currencies or []) or None,
-                fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 notes=["CRYPTOPANIC_API_KEY not set — using empty news feed"],
             )
             self._to_cache(cache_key, bundle)
@@ -111,17 +110,17 @@ class CryptoPanicClient:
             log.warning("news.cryptopanic.failed", error=str(e))
             return NewsBundle(
                 token=",".join(currencies or []) or None,
-                fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 notes=[f"cryptopanic fetch failed: {e.__class__.__name__}"],
             )
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        cutoff = datetime.now(UTC) - timedelta(days=since_days)
         items: list[NewsItem] = []
         for r in data.get("results", []):
             try:
                 pub = datetime.fromisoformat(r["published_at"].replace("Z", "+00:00"))
             except Exception:
-                pub = datetime.now(timezone.utc)
+                pub = datetime.now(UTC)
             if pub < cutoff:
                 continue
             items.append(NewsItem(
@@ -136,7 +135,7 @@ class CryptoPanicClient:
 
         bundle = NewsBundle(
             token=",".join(currencies or []) or None,
-            fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
             items=items,
         )
         self._to_cache(cache_key, bundle)

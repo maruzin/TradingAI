@@ -15,6 +15,7 @@ black-box prediction.
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
@@ -164,10 +165,8 @@ def analyze(
     df = df.copy()
     df.columns = [c.lower() for c in df.columns]
     if not isinstance(df.index, pd.DatetimeIndex):
-        try:
+        with contextlib.suppress(Exception):
             df.index = pd.to_datetime(df.index, utc=True)
-        except Exception:
-            pass
 
     swings = _detect_swings(df, distance=swing_distance, prominence_pct=swing_prominence_pct)
     structure = _classify_structure(swings, last_close=float(df["close"].iloc[-1]))
@@ -694,7 +693,7 @@ def _smc_order_blocks_and_fvg(df: pd.DataFrame) -> list[PatternHit]:
         if body_i < 0 and run_up and c[i+3] > h[max(0, i-5):i].max():
             out.append(PatternHit("bullish_order_block", 0.65, i, i + 3,
                                    target=float(c[i+3] + (c[i+3] - l[i])),
-                                   notes=f"down candle followed by 3 up bars + BOS"))
+                                   notes="down candle followed by 3 up bars + BOS"))
         if body_i > 0 and run_dn and c[i+3] < l[max(0, i-5):i].min():
             out.append(PatternHit("bearish_order_block", 0.65, i, i + 3,
                                    target=float(c[i+3] - (h[i] - c[i+3])),
@@ -835,7 +834,6 @@ def _candlesticks(df: pd.DataFrame) -> list[PatternHit]:
     if i >= 2:
         b0 = abs(c[i - 2] - o[i - 2])
         b1 = abs(c[i - 1] - o[i - 1])
-        b2 = body
         bull0 = c[i - 2] > o[i - 2]
         bear0 = c[i - 2] < o[i - 2]
         bull2 = is_bull

@@ -14,6 +14,7 @@ Postgres with our migrations applied. Run them locally before any deploy:
 from __future__ import annotations
 
 import os
+
 import pytest
 
 DB_URL = os.environ.get("TRADINGAI_TEST_DB_URL")

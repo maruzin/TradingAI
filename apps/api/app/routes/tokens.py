@@ -7,6 +7,7 @@ Sprint 0: no auth, no DB persistence. Sprint 2 wires Supabase RLS + caches brief
 """
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -20,10 +21,12 @@ from ..repositories import ai_calls as calls_repo
 from ..repositories import audit as audit_repo
 from ..repositories import briefs as brief_repo
 from ..repositories import rag as rag_repo
+from ..repositories import ta_snapshots as ta_repo
 from ..services.coingecko import CoinGeckoClient
 from ..services.cvd import compute_cvd
 from ..services.predictor import forecast as predictor_forecast
-from ..services.rate_limit import RateLimitExceeded, enforce as enforce_rate_limit
+from ..services.rate_limit import RateLimitExceeded
+from ..services.rate_limit import enforce as enforce_rate_limit
 
 router = APIRouter()
 log = get_logger("routes.tokens")
@@ -178,12 +181,12 @@ async def get_brief_diff(
     plus a 'changes' list of structured field deltas. The UI renders this as a
     delta panel beneath the current brief.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
     latest = await brief_repo.latest_brief(symbol, horizon, max_age_hours=24 * 7)
     if not latest:
         raise HTTPException(404, detail="no recent brief")
     prev = await brief_repo.previous_brief_before(
-        symbol, horizon, before=datetime.now(timezone.utc), min_age_hours=18,
+        symbol, horizon, before=datetime.now(UTC), min_age_hours=18,
     )
     return {
         "latest": latest,
@@ -302,6 +305,25 @@ async def get_cvd(
         lookback_minutes=lookback_minutes,
     )
     return snap.as_dict()
+
+
+@router.get("/{symbol}/ta")
+async def get_ta_snapshots(
+    symbol: str,
+    timeframes: str = Query(
+        "1h,3h,6h,12h",
+        description="comma-separated subset of 1h,3h,6h,12h,1d",
+    ),
+) -> dict:
+    """Latest TA snapshot per requested timeframe. Empty `snapshots` array
+    when the worker hasn't run yet — UI renders the empty state."""
+    tf_list = [t.strip() for t in timeframes.split(",") if t.strip()]
+    try:
+        rows = await ta_repo.latest_for_symbol(symbol.upper(), timeframes=tf_list)
+    except Exception as e:
+        log.warning("tokens.ta_query_failed", symbol=symbol, error=str(e))
+        rows = []
+    return {"symbol": symbol.upper(), "snapshots": rows}
 
 
 def _snapshot_dict(snap) -> dict:

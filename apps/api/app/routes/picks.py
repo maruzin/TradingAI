@@ -7,7 +7,6 @@
 """
 from __future__ import annotations
 
-from datetime import date as date_type
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -63,5 +62,4 @@ async def for_date(date_str: str) -> dict:
 async def run_now(_: CurrentUser = Depends(require_admin)) -> dict:
     """Trigger an ad-hoc daily-picks run. Blocking; ~2–5 minutes."""
     from ..workers.daily_picks import run as picks_run
-    result = await picks_run(briefs_for_top=10, no_briefs=False, notify=False)
-    return result
+    return await picks_run(briefs_for_top=10, no_briefs=False, notify=False)

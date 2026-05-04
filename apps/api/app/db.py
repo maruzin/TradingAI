@@ -5,8 +5,9 @@ swaps in Supabase Auth + RLS context per request.
 """
 from __future__ import annotations
 
-import asyncpg
 from typing import Any
+
+import asyncpg
 
 from .logging_setup import get_logger
 from .settings import get_settings

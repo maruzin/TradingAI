@@ -13,7 +13,8 @@ from app.agents.llm_provider import _extract_sources_from_text
 from app.repositories.audit import _redact
 from app.services.circuit_breaker import BreakerOpen, breaker, get_state, reset
 from app.services.historical import _candidate_symbols
-from app.services.rate_limit import RateLimitExceeded, enforce, reset as rl_reset
+from app.services.rate_limit import RateLimitExceeded, enforce
+from app.services.rate_limit import reset as rl_reset
 
 
 # -----------------------------------------------------------------------------

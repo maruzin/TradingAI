@@ -24,6 +24,7 @@ from ..settings import get_settings
 from . import (
     alert_dispatcher,
     backtest_evaluator,
+    bot_decider,
     daily_digest,
     daily_morning,
     daily_picks,
@@ -31,6 +32,7 @@ from . import (
     predictor_trainer,
     price_poller,
     setup_watcher,
+    ta_snapshotter,
     thesis_tracker,
     wallet_poller,
 )
@@ -54,6 +56,14 @@ class WorkerSettings:
         cron(gossip_poller.run,       minute={i for i in range(0, 60) if i % 5 == 0}),
         cron(wallet_poller.run,       minute={i for i in range(0, 60) if i % 5 == 2}),
         cron(setup_watcher.run,       minute={i for i in range(0, 60) if i % 15 == 7}),
+        # TA snapshotter — fans out per timeframe, staggered so they don't
+        # collide on Binance rate limits. The bot worker reads these.
+        cron(ta_snapshotter.run_1h,   minute={5}),
+        cron(ta_snapshotter.run_3h,   hour={i for i in range(0, 24) if i % 3 == 0}, minute={10}),
+        cron(ta_snapshotter.run_6h,   hour={i for i in range(0, 24) if i % 6 == 0}, minute={15}),
+        cron(ta_snapshotter.run_12h,  hour={i for i in range(0, 24) if i % 12 == 0}, minute={20}),
+        # Trading bot — fuses TA + sentiment + on-chain + ML forecast every hour.
+        cron(bot_decider.run,         minute={25}),
         cron(thesis_tracker.run,      minute={7}),
         cron(daily_digest.run,        hour={9}, minute={0}),
         cron(daily_morning.run,       hour={7}, minute={30}),  # right after picks

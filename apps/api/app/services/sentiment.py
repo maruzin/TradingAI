@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -96,7 +96,7 @@ class LunarCrushClient:
 
         bundle = SentimentBundle(
             token=sym,
-            fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
         )
 
         if not self.settings.lunarcrush_api_key:

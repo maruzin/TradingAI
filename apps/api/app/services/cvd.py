@@ -25,10 +25,10 @@ not money, but blocks the worker process on some hosts).
 """
 from __future__ import annotations
 
-import json
+import contextlib
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..logging_setup import get_logger
@@ -99,10 +99,8 @@ async def compute_cvd(
                 notes=["streaming worker not running, or Redis unreachable"],
             )
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await client.aclose()
-        except Exception:
-            pass
 
     if not entries:
         return CVDSnapshot(
@@ -112,7 +110,6 @@ async def compute_cvd(
 
     # Bucket → (buy_qty, sell_qty, last_price)
     buckets: dict[int, list[float]] = {}
-    last_price = 0.0
     for _, fields in entries:
         try:
             ts_ms = int(fields["ts"])
@@ -129,7 +126,6 @@ async def compute_cvd(
         else:
             b[0] += qty
         b[2] = price
-        last_price = price
 
     points: list[CVDPoint] = []
     cvd = 0.0
@@ -141,7 +137,7 @@ async def compute_cvd(
         total_buy += buy_q
         total_sell += sell_q
         points.append(CVDPoint(
-            ts=datetime.fromtimestamp(bucket_ts, tz=timezone.utc).isoformat(),
+            ts=datetime.fromtimestamp(bucket_ts, tz=UTC).isoformat(),
             cvd=round(cvd, 4),
             buy_qty=round(buy_q, 4),
             sell_qty=round(sell_q, 4),

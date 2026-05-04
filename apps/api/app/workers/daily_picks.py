@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -87,7 +87,7 @@ async def run(
     risk_on = _risk_on_from_macro(macro_snap)
 
     scored: list[dict[str, Any]] = []
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=365)
 
     sem = asyncio.Semaphore(4)

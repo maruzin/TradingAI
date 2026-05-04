@@ -21,11 +21,9 @@ Limitations called out up front:
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import pickle
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -206,7 +204,7 @@ async def train_for_symbol(
         return None
 
     horizon_bars = HORIZON_BARS.get(horizon, 30)
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=int(365 * years))
     h = HistoricalClient()
     try:
@@ -255,14 +253,14 @@ async def train_for_symbol(
     if len(yd_va) > 0 and yd_va.nunique() > 1:
         auc_dn = float(roc_auc_score(yd_va, model_dn.predict_proba(X_va)[:, 1]))
 
-    version = model_version or datetime.now(timezone.utc).strftime("%Y%m%d")
+    version = model_version or datetime.now(UTC).strftime("%Y%m%d")
     safe = pair.replace("/", "_")
     path = MODEL_DIR / f"{safe}__{horizon}__{version}.pkl"
     payload = {
         "model_up": model_up,
         "model_down": model_dn,
         "feature_names": list(feats.columns),
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": datetime.now(UTC).isoformat(),
         "n_train": len(X_tr),
         "auc_up": auc_up,
         "auc_down": auc_dn,
@@ -319,7 +317,7 @@ async def forecast(
     if payload is None:
         return None
 
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=400)  # enough for SMA200 + 60d windows
     h = HistoricalClient()
     try:
@@ -352,7 +350,7 @@ async def forecast(
         target_pct=round(atr_pct, 2) if atr_pct else None,
         invalidation_pct=round(atr_pct, 2) if atr_pct else None,
         model_version=payload.get("trained_at", "unknown"),
-        as_of_utc=datetime.now(timezone.utc).isoformat(),
+        as_of_utc=datetime.now(UTC).isoformat(),
         features_used=len(payload["feature_names"]),
         notes=[
             "Probability, not certainty. Base rates: P(up) of any random crypto bar ≈ 50%.",

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -193,7 +193,7 @@ class MacroOverlay:
         await self.client.aclose()
 
     async def snapshot(self) -> MacroSnapshot:
-        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        as_of = datetime.now(UTC).isoformat(timespec="seconds")
         indices_t, commodities_t, indicators_t = await asyncio.gather(
             self._yahoo_quotes(DEFAULT_INDICES, as_index=True),
             self._yahoo_quotes(DEFAULT_COMMODITIES, as_index=False),
@@ -313,7 +313,7 @@ class MacroOverlay:
 # -----------------------------------------------------------------------------
 def _market_sessions_now() -> list[MarketSession]:
     out: list[MarketSession] = []
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     for market, tz_name, open_t, close_t in MARKETS:
         tz = ZoneInfo(tz_name)
         local = now_utc.astimezone(tz)
@@ -334,8 +334,8 @@ def _market_sessions_now() -> list[MarketSession]:
             market=market,
             timezone=tz_name,
             is_open=is_open,
-            next_open_utc=next_open_local.astimezone(timezone.utc).isoformat(timespec="seconds"),
-            next_close_utc=next_close_local.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            next_open_utc=next_open_local.astimezone(UTC).isoformat(timespec="seconds"),
+            next_close_utc=next_close_local.astimezone(UTC).isoformat(timespec="seconds"),
         ))
     out.append(MarketSession(
         market="CRYPTO", timezone="UTC", is_open=True,

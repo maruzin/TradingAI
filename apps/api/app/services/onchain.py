@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import UTC
 from typing import Any
 
 import httpx
@@ -86,10 +87,10 @@ class OnchainClient:
         await self.client.aclose()
 
     async def snapshot(self, *, chain: str, contract: str | None) -> OnchainSnapshot:
-        from datetime import datetime, timezone
+        from datetime import datetime
         snap = OnchainSnapshot(
             chain=chain, contract=contract,
-            fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
         )
         if not contract:
             snap.notes.append("no contract address — native asset")

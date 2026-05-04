@@ -8,10 +8,7 @@ Used by the brief and thesis flows for RAG over the user's history.
 """
 from __future__ import annotations
 
-import asyncio
-from typing import Iterable
-
-from ..agents.llm_provider import OllamaProvider, OpenAIProvider, get_provider
+from ..agents.llm_provider import OllamaProvider, OpenAIProvider
 from ..logging_setup import get_logger
 from ..settings import get_settings
 

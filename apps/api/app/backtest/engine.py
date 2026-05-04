@@ -17,10 +17,8 @@ Design goals:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Callable, Literal, Protocol
+from typing import Literal, Protocol
 
-import numpy as np
 import pandas as pd
 
 SignalKind = Literal["enter_long", "enter_short", "exit"]

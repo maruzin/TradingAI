@@ -11,9 +11,9 @@ Used by:
 """
 from __future__ import annotations
 
-import json
+import contextlib
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +57,9 @@ async def project(token: str, *, timeframe: str = "1d", years: int = 1) -> Proje
         snap = await cg.snapshot(token)
         symbol = snap.symbol.upper()
         pair = f"{symbol}/USDT"
-        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        as_of = datetime.now(UTC).isoformat(timespec="seconds")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         fr = await h.fetch_with_fallback(FetchSpec(
             symbol=pair, exchange="binance", timeframe=timeframe,  # type: ignore[arg-type]
             since_utc=now - timedelta(days=int(365 * years)), until_utc=now,
@@ -131,10 +131,8 @@ async def project(token: str, *, timeframe: str = "1d", years: int = 1) -> Proje
         finally:
             close_fn = getattr(provider, "close", None)
             if close_fn is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await close_fn()
-                except Exception:
-                    pass
 
         markdown, structured = _split_markdown_and_json(resp.text)
         markdown, banned = _scrub_banned(markdown)

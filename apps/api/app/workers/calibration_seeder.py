@@ -28,13 +28,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import time
-from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from .. import db
@@ -71,7 +70,7 @@ async def seed(
     """
     started = time.time()
     horizon_bars = HORIZON_BARS[horizon]
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=int(365 * years))
     h = HistoricalClient()
     seeded = 0
@@ -200,7 +199,7 @@ async def seed(
     finally:
         await h.close()
 
-    try:
+    with contextlib.suppress(Exception):
         await audit_repo.write(
             user_id=None, actor="system", action="calibration_seeder.run",
             target=",".join(pairs),
@@ -208,8 +207,6 @@ async def seed(
             result={"seeded": seeded, "skipped": skipped, "failed": failed,
                     "latency_s": int(time.time() - started)},
         )
-    except Exception:
-        pass
     log.info("seeder.done",
              seeded=seeded, skipped=skipped, failed=failed,
              latency_s=int(time.time() - started))
@@ -228,7 +225,8 @@ def main() -> int:
     result = asyncio.run(seed(
         pairs, years=args.years, sample_step_bars=args.step_bars, horizon=args.horizon,
     ))
-    import sys, json as _json
+    import json as _json
+    import sys
     sys.stdout.write(_json.dumps(result, default=str) + "\n")
     return 0
 

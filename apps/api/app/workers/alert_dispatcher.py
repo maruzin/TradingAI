@@ -6,6 +6,7 @@ Drains pending alerts and delivers via Telegram. Marks ``status='sent'`` or
 from __future__ import annotations
 
 import time
+from datetime import UTC
 
 from .. import db
 from ..logging_setup import get_logger
@@ -42,8 +43,8 @@ async def run(_ctx: dict | None = None) -> None:
                     user_id,
                 )
                 if row and row.get("alerts_snoozed_until"):
-                    from datetime import datetime, timezone
-                    if row["alerts_snoozed_until"] > datetime.now(timezone.utc):
+                    from datetime import datetime
+                    if row["alerts_snoozed_until"] > datetime.now(UTC):
                         snoozed += 1
                         continue
             except Exception:

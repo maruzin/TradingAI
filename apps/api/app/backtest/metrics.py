@@ -41,7 +41,7 @@ def _bars_per_year(df: pd.DataFrame) -> float:
 
 def compute_metrics(
     equity_curve: list[float],
-    trades: "list[Trade]",
+    trades: list[Trade],
     *,
     initial: float,
     df: pd.DataFrame,
@@ -72,10 +72,7 @@ def compute_metrics(
     n_years = max(len(eq) / bpy, 1e-9)
     cagr = (eq[-1] / initial) ** (1 / n_years) - 1 if eq[-1] > 0 else -1.0
 
-    if rets.size == 0 or rets.std() == 0:
-        sharpe = 0.0
-    else:
-        sharpe = float(rets.mean() / rets.std() * math.sqrt(bpy))
+    sharpe = 0.0 if rets.size == 0 or rets.std() == 0 else float(rets.mean() / rets.std() * math.sqrt(bpy))
 
     downside = rets[rets < 0]
     if downside.size == 0 or downside.std() == 0:

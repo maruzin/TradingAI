@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .. import db
 
@@ -15,7 +15,7 @@ def _gen_code() -> str:
 async def mint(*, issued_by: str, note: str | None = None,
                expires_days: int = 14) -> dict:
     code = _gen_code()
-    expires = datetime.now(timezone.utc) + timedelta(days=expires_days)
+    expires = datetime.now(UTC) + timedelta(days=expires_days)
     row = await db.fetchrow(
         """
         insert into invites (code, issued_by, note, expires_at)

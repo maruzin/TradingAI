@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -95,7 +95,7 @@ async def previous_brief_before(
 
 async def latest_brief(symbol: str, horizon: str, *, max_age_hours: int = 6) -> dict[str, Any] | None:
     """Return the most recent fresh brief for (symbol, horizon), if any."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=max_age_hours)
     row = await db.fetchrow(
         """
         select b.*, t.symbol, t.name, t.chain

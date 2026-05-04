@@ -26,7 +26,6 @@ in `ALL_STRATEGIES`. The route handler enumerates them automatically.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
 import pandas as pd
 

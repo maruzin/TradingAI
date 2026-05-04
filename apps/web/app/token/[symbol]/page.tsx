@@ -9,6 +9,8 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { Markdown } from "@/components/Markdown";
 import { TF_OPTIONS, type TFCode } from "@/components/TradingViewWidget";
 import { ShareBrief } from "@/components/ShareBrief";
+import { TAPanel } from "@/components/TAPanel";
+import { BotVerdictCard } from "@/components/BotVerdictCard";
 import clsx from "clsx";
 
 // TradingView's embed script is ~50kB and only useful client-side. Lazy-load
@@ -119,6 +121,10 @@ export default function TokenPage() {
           interval={tf}
         />
       </div>
+
+      <BotVerdictCard symbol={(snap.data?.symbol || symbol).toUpperCase()} />
+
+      <TAPanel symbol={(snap.data?.symbol || symbol).toUpperCase()} />
 
       <BriefSection brief={brief} />
 

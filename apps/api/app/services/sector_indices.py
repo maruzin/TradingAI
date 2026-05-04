@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..logging_setup import get_logger
@@ -83,7 +83,7 @@ async def snapshot() -> SectorIndices:
     h = HistoricalClient()
     try:
         try:
-            until = datetime.now(timezone.utc)
+            until = datetime.now(UTC)
             since = until - timedelta(days=120)
             fr = await h.fetch_with_fallback(FetchSpec(
                 symbol="ETH/BTC", exchange="binance", timeframe="1d",
@@ -117,7 +117,7 @@ async def snapshot() -> SectorIndices:
         total_market_cap_usd=total_mc,
         alt_season_score=round(score, 1) if score is not None else None,
         alt_season_label=label,
-        as_of_utc=datetime.now(timezone.utc).isoformat(),
+        as_of_utc=datetime.now(UTC).isoformat(),
     )
     _CACHE = (now, out)
     return out

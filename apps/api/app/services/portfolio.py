@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -61,7 +61,7 @@ async def compute_risk(holdings: list[Holding]) -> PortfolioRisk:
             notes=["empty portfolio"],
         )
 
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=120)
     h = HistoricalClient()
     prices: dict[str, pd.Series] = {}

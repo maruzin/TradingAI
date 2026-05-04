@@ -6,9 +6,10 @@ liquidation heatmaps and longer history. We hit only the free endpoints; if the
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -75,7 +76,7 @@ class CoinglassClient:
     async def funding_for(self, symbol: str) -> FundingBundle:
         sym = symbol.upper()
         bundle = FundingBundle(symbol=sym,
-                               fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+                               fetched_at=datetime.now(UTC).isoformat(timespec="seconds"))
         if not getattr(self.settings, "coinglass_api_key", None):
             bundle.notes.append("COINGLASS_API_KEY not set; funding/OI unavailable")
             return bundle
@@ -108,10 +109,8 @@ class CoinglassClient:
             total = 0.0
             for r in rows:
                 if v := r.get("openInterestUsd") or r.get("oiUsd"):
-                    try:
+                    with contextlib.suppress(Exception):
                         total += float(v)
-                    except Exception:
-                        pass
             if total > 0:
                 bundle.open_interest_usd = total
         except Exception as e:

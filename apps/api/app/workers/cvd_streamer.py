@@ -17,10 +17,10 @@ so it can be safely included in deploy scripts that always launch it.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import signal
-from typing import Any
 
 from ..logging_setup import configure_logging, get_logger
 from ..services.cvd import REDIS_STREAM_MAXLEN, REDIS_STREAM_PREFIX
@@ -44,8 +44,8 @@ async def main() -> int:
         return 0
 
     try:
-        import websockets
         import redis.asyncio as aioredis
+        import websockets
     except ImportError as e:
         log.warning("cvd_streamer.missing_deps", error=str(e))
         return 1
@@ -94,16 +94,12 @@ async def main() -> int:
                         log.debug("cvd_streamer.row_failed", error=str(e))
         except Exception as e:
             log.warning("cvd_streamer.disconnected", error=str(e), backoff=backoff)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=backoff)
-            except asyncio.TimeoutError:
-                pass
             backoff = min(60, backoff * 2)
 
-    try:
+    with contextlib.suppress(Exception):
         await redis.aclose()
-    except Exception:
-        pass
     log.info("cvd_streamer.stop")
     return 0
 

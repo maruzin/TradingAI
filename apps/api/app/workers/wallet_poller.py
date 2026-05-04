@@ -11,6 +11,7 @@ still works on Etherscan but is slower; you can set chain-specific keys in
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any
 
@@ -134,10 +135,8 @@ async def run(_ctx: dict | None = None) -> dict[str, Any]:
                         log.debug("wallet_poller.alert_failed",
                                   wallet=label, error=str(e))
 
-            try:
+            with contextlib.suppress(Exception):
                 await wallet_repo.mark_polled(wallet_id)
-            except Exception:
-                pass
             polled += 1
 
         # One audit row per cycle so the trail records the worker ran.

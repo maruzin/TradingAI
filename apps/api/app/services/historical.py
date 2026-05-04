@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Iterable, Literal
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 import pandas as pd
 
@@ -94,7 +95,7 @@ class HistoricalClient:
         forward in time. Each page sleeps briefly to respect exchange rate limits
         (CCXT's `rateLimit` is consulted automatically when `enableRateLimit=True`).
         """
-        until = (spec.until_utc or datetime.now(timezone.utc))
+        until = (spec.until_utc or datetime.now(UTC))
         since = spec.since_utc or (until - timedelta(days=4 * 365))
         if since >= until:
             raise ValueError(f"since ({since}) must be < until ({until})")
@@ -222,8 +223,7 @@ def _to_df(rows: Iterable[list[float]]) -> pd.DataFrame:
     if df.empty:
         return df
     df["ts"] = pd.to_datetime(df["ts"], unit="ms", utc=True)
-    df = df.set_index("ts").drop_duplicates().sort_index()
-    return df
+    return df.set_index("ts").drop_duplicates().sort_index()
 
 
 async def fetch_many(specs: list[FetchSpec], *, concurrency: int = 4) -> list[FetchResult]:

@@ -22,8 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 
@@ -40,7 +39,7 @@ async def harvest(
     timeframe: str = "1d", years: int = 4,
     exchange: str = "binance",
 ) -> list[dict]:
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=365 * years)
     client = HistoricalClient()
     points: list[dict] = []

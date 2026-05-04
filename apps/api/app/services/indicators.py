@@ -23,6 +23,7 @@ the OHLCV. That keeps it testable and avoids tight coupling to CCXT/CoinGecko.
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -365,10 +366,8 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
     elif "date" in cols:
         df = df.set_index(cols["date"])
     if not isinstance(df.index, pd.DatetimeIndex):
-        try:
+        with contextlib.suppress(Exception):
             df.index = pd.to_datetime(df.index, utc=True)
-        except Exception:
-            pass
     df = df.sort_index()
 
     # cast numerics
@@ -408,10 +407,10 @@ def _candlestick_patterns(df: pd.DataFrame) -> CandlePatterns:
         return out
 
     o, h, l, c = df["open"], df["high"], df["low"], df["close"]
-    body = (c - o).abs()
-    upper_wick = h - np.maximum(o, c)
-    lower_wick = np.minimum(o, c) - l
-    rng = (h - l).replace(0, np.nan)
+    (c - o).abs()
+    h - np.maximum(o, c)
+    np.minimum(o, c) - l
+    (h - l).replace(0, np.nan)
     eps = 1e-9
 
     # last bar features
@@ -457,7 +456,7 @@ def _candlestick_patterns(df: pd.DataFrame) -> CandlePatterns:
         o0, c0 = o.iloc[-3], c.iloc[-3]
         o1, c1 = o.iloc[-2], c.iloc[-2]
         o2, c2 = o.iloc[-1], c.iloc[-1]
-        b0, b1, b2 = abs(c0 - o0), abs(c1 - o1), abs(c2 - o2)
+        b0, b1, _b2 = abs(c0 - o0), abs(c1 - o1), abs(c2 - o2)
         # morning star
         if c0 < o0 and b0 > 0 and b1 < 0.4 * b0 and c2 > o2 and c2 > (o0 + c0) / 2:
             out.morning_star = 1

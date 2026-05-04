@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..logging_setup import get_logger
@@ -131,7 +131,7 @@ async def run(_ctx: dict | None = None) -> dict[str, Any]:
 
 async def _scan_pair(h: HistoricalClient, pair: str) -> list[dict[str, Any]]:
     """Pull 1d + 4h frames and return any high-conviction triggers."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     daily = await h.fetch_with_fallback(FetchSpec(
         symbol=pair, exchange="binance", timeframe="1d",  # type: ignore[arg-type]
         since_utc=now - timedelta(days=400), until_utc=now,

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-
 PUBLIC_GETS_NO_PARAMS = [
     "/healthz",
     "/readyz",

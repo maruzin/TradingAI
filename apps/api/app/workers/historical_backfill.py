@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..logging_setup import configure_logging, get_logger
 from ..services.historical import FetchSpec, HistoricalClient
@@ -54,7 +54,7 @@ async def run_once(
     exchange: str = "binance",
     concurrency: int = 4,
 ) -> None:
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=365 * years)
 
     specs: list[FetchSpec] = []

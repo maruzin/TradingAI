@@ -8,7 +8,7 @@ JWT (route handlers).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from .. import db
@@ -154,7 +154,7 @@ async def insert_event(
     payload: dict[str, Any] | None = None,
 ) -> str | None:
     """Insert a wallet event idempotently; return the new id or None on conflict."""
-    ts = datetime.fromtimestamp(ts_unix, tz=timezone.utc)
+    ts = datetime.fromtimestamp(ts_unix, tz=UTC)
     row = await db.fetchrow(
         """
         insert into wallet_events (

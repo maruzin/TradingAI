@@ -12,7 +12,6 @@ Updates ``ai_calls.outcome`` and ``outcome_meta``.
 from __future__ import annotations
 
 import time
-from datetime import timedelta
 
 from .. import db
 from ..logging_setup import get_logger

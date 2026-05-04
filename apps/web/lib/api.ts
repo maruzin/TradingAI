@@ -321,6 +321,59 @@ export type PortfolioRisk = {
   notes: string[];
 };
 
+export type TASnapshot = {
+  id: string;
+  symbol: string;
+  timeframe: "1h" | "3h" | "6h" | "12h" | "1d";
+  captured_at: string;
+  stance: "long" | "short" | "neutral" | "no-data";
+  confidence: number;
+  composite_score: number;
+  last_price: number | null;
+  suggested_entry: number | null;
+  suggested_stop: number | null;
+  suggested_target: number | null;
+  risk_reward: number | null;
+  atr_pct: number | null;
+  summary: Record<string, unknown>;
+  rationale: string[];
+};
+
+export type BotDecision = {
+  id: string;
+  symbol: string;
+  decided_at: string;
+  horizon: "swing" | "position" | "long";
+  stance: "long" | "short" | "neutral" | "watch";
+  confidence: number;
+  composite_score: number;
+  last_price: number | null;
+  suggested_entry: number | null;
+  suggested_stop: number | null;
+  suggested_target: number | null;
+  risk_reward: number | null;
+  inputs: Record<string, unknown>;
+  reasoning: string[];
+  invalidation: string[];
+};
+
+export type BotDecisionSummary = {
+  id: string;
+  symbol: string;
+  decided_at: string;
+  horizon: string;
+  stance: string;
+  confidence: number;
+  composite_score: number;
+  last_price: number | null;
+  suggested_entry: number | null;
+  suggested_stop: number | null;
+  suggested_target: number | null;
+  risk_reward: number | null;
+  reasoning: string[];
+  invalidation: string[];
+};
+
 export type SectorIndices = {
   btc_dominance_pct: number | null;
   eth_dominance_pct: number | null;
@@ -574,6 +627,20 @@ export const api = {
 
   // sector indices
   sectors: () => jsonFetch<SectorIndices>("/regime/sectors"),
+
+  // TA snapshots (per timeframe, written by ta_snapshotter worker)
+  taSnapshots: (symbol: string, timeframes: string[] = ["1h","3h","6h","12h"]) =>
+    jsonFetch<{ symbol: string; snapshots: TASnapshot[] }>(
+      `/tokens/${encodeURIComponent(symbol)}/ta?timeframes=${timeframes.join(",")}`
+    ),
+
+  // Trading-bot decisions
+  botLatest: (symbol: string) =>
+    jsonFetch<{ symbol: string; decision: BotDecision | null }>(
+      `/bot/decisions/${encodeURIComponent(symbol)}`
+    ),
+  botTop: (limit = 50) =>
+    jsonFetch<{ decisions: BotDecisionSummary[] }>(`/bot/decisions?limit=${limit}`),
 
   // ML predictor + CVD + EV table + detailed track record
   forecast: (symbol: string, horizon: "swing" | "position" | "long" = "position") =>

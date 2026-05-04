@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
+from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from dataclasses import asdict
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..backtest.engine import Backtest, BacktestResult
@@ -57,7 +57,7 @@ async def run_backtest(req: BacktestRequest) -> dict:
     except ValueError as e:
         raise HTTPException(404, detail=str(e)) from e
 
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=365 * req.years)
 
     client = HistoricalClient()
@@ -101,7 +101,7 @@ async def run_backtest(req: BacktestRequest) -> dict:
         "timeframe": req.timeframe,
         "exchange": req.exchange,
         "years": req.years,
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": datetime.now(UTC).isoformat(),
         "results": [_serialize_result(r) for r in results],
         "matrix_markdown": render_matrix_markdown(results),
     }

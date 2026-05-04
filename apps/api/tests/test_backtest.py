@@ -8,7 +8,8 @@ import pytest
 from app.backtest.engine import Backtest, Signal
 from app.backtest.metrics import compute_metrics
 from app.backtest.strategies import (
-    GoldenDeathCross, MacdCrossover, RsiMeanReversion, get_strategy, list_strategy_names,
+    get_strategy,
+    list_strategy_names,
 )
 
 
@@ -52,7 +53,7 @@ def test_engine_no_lookahead():
         name = "rec"
         def __call__(self, df):
             seen_lengths.append(len(df))
-            return None
+            return
 
     bt = Backtest(strategy=Recorder(), warmup_bars=200)
     df = _ohlcv()

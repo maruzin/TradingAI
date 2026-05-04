@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -37,7 +37,7 @@ async def list_recent(
     since: datetime | None = None,
 ) -> list[dict[str, Any]]:
     if since is None:
-        since = datetime.now(timezone.utc) - timedelta(days=2)
+        since = datetime.now(UTC) - timedelta(days=2)
     sql = [
         "select id::text, ts, kind, source, title, url, summary,",
         "  tags, impact, token_symbols, payload",

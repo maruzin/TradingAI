@@ -8,10 +8,11 @@ The result feeds the ``/gossip`` UI feed and the gossip_poller worker.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import httpx
@@ -57,8 +58,7 @@ class GossipAggregator:
 
     async def close(self) -> None:
         for c in (self.news, self.gdelt, self.lunar):
-            try: await c.close()
-            except Exception: pass
+            with contextlib.suppress(Exception): await c.close()
         await self.client.aclose()
 
     async def collect(
@@ -197,7 +197,7 @@ class GossipAggregator:
                 from_owner = (tx.get("from") or {}).get("owner") or "unknown"
                 to_owner = (tx.get("to") or {}).get("owner") or "unknown"
                 title = f"Whale: {amt:,.0f} USD {sym} from {from_owner} → {to_owner}"
-                ts = datetime.fromtimestamp(tx["timestamp"], tz=timezone.utc).isoformat(timespec="seconds")
+                ts = datetime.fromtimestamp(tx["timestamp"], tz=UTC).isoformat(timespec="seconds")
                 out.append(GossipEvent(
                     ts=ts, kind="whale", source="whale-alert",
                     title=title, url="https://whale-alert.io/",

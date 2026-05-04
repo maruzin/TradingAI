@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .. import db
-
 
 HORIZON_SECONDS = {
     "swing": 7 * 86400,        # 1 week
@@ -84,7 +83,7 @@ async def detailed_track_record(*, since_days: int = 90) -> dict[str, Any]:
     Log-loss: −Σ(o·log p + (1−o)·log(1−p)) / N — measures probabilistic skill.
     """
     import math
-    cutoff_secs = datetime.now(timezone.utc).timestamp() - since_days * 86400
+    cutoff_secs = datetime.now(UTC).timestamp() - since_days * 86400
     rows = await db.fetch(
         """
         select call_type, confidence, outcome, claim
@@ -148,7 +147,7 @@ async def detailed_track_record(*, since_days: int = 90) -> dict[str, Any]:
 
 async def track_record_summary(*, since_days: int = 90) -> dict[str, Any]:
     """Top-line track-record metrics for the dashboard endpoint."""
-    cutoff = datetime.now(timezone.utc).timestamp() - since_days * 86400
+    cutoff = datetime.now(UTC).timestamp() - since_days * 86400
     rows = await db.fetch(
         """
         select call_type,

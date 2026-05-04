@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from app.services.wyckoff import classify
 
@@ -47,7 +46,7 @@ def test_clear_downtrend_classifies_as_markdown():
 def test_range_bound_with_buyer_dominance_is_accumulation():
     rng = list(np.tile([100, 102, 99, 101, 100, 103, 98, 100], 12))
     vols = []
-    for c, prev in zip(rng, [100] + rng[:-1]):
+    for c, prev in zip(rng, [100] + rng[:-1], strict=False):
         vols.append(2_000_000.0 if c > prev else 800_000.0)
     snap = classify(_ohlcv(rng, vols=vols), lookback=60)
     assert snap.phase in {"accumulation", "transition"}

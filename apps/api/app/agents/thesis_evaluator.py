@@ -11,8 +11,9 @@ Output is a structured JSON with:
 """
 from __future__ import annotations
 
+import contextlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..logging_setup import get_logger
@@ -72,14 +73,12 @@ class ThesisEvaluatorAgent:
 
     async def close(self) -> None:
         for c in (self.coingecko, self.macro, self.news, self.sentiment):
-            try:
+            with contextlib.suppress(Exception):
                 await c.close()
-            except Exception:
-                pass
 
     async def evaluate(self, thesis: dict[str, Any]) -> dict[str, Any]:
         token_symbol = thesis["token_symbol"]
-        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        as_of = datetime.now(UTC).isoformat(timespec="seconds")
 
         snap = await self.coingecko.snapshot(token_symbol)
         macro = await self.macro.snapshot()
@@ -100,7 +99,7 @@ class ThesisEvaluatorAgent:
             f"## Core thesis\n{thesis.get('core_thesis')}\n\n"
             f"## Key assumptions\n"
             + "\n".join(f"- {a}" for a in assumptions)
-            + f"\n\n## Invalidation criteria\n"
+            + "\n\n## Invalidation criteria\n"
             + "\n".join(f"- {i}" for i in invalidations)
             + f"\n\n## Current snapshot\n"
             f"- price ${snap.price_usd}, mcap ${snap.market_cap_usd}, "

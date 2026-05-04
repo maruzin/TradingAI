@@ -7,7 +7,7 @@ This is the "trader's view" you'd skim each morning to see where setups are.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -38,7 +38,7 @@ async def get_signals(
     years: int = Query(1, ge=1, le=4),
 ) -> dict:
     pairs = [s.strip() for s in symbols.split(",") if s.strip()]
-    until = datetime.now(timezone.utc)
+    until = datetime.now(UTC)
     since = until - timedelta(days=365 * years)
 
     client = HistoricalClient()
@@ -180,7 +180,7 @@ async def get_signals(
     rows.sort(key=lambda r: order.get(r.get("verdict", "no_setup"), 99))
 
     return {
-        "as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "as_of": datetime.now(UTC).isoformat(timespec="seconds"),
         "timeframe": timeframe,
         "years": years,
         "rows": rows,

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query
 
@@ -33,7 +33,7 @@ async def feed(
     auto_poll: bool = Query(True, description="poll when feed empty + cooldown elapsed"),
 ) -> dict:
     kind_list = [k.strip() for k in kinds.split(",")] if kinds else None
-    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    since = datetime.now(UTC) - timedelta(hours=since_hours)
     try:
         events = await gossip_repo.list_recent(
             kinds=kind_list, min_impact=min_impact, limit=limit, since=since,
@@ -69,7 +69,7 @@ async def feed(
                     log.warning("gossip.auto_poll_failed", error=str(e))
 
     return {
-        "as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "as_of": datetime.now(UTC).isoformat(timespec="seconds"),
         "events": events,
     }
 
@@ -90,5 +90,5 @@ async def refresh() -> dict:
     try:
         result = await asyncio.wait_for(poll_run(), timeout=25.0)
         return result or {"status": "completed"}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"status": "timeout", "note": "poll exceeded 25s; partial results may have landed"}

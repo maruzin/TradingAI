@@ -176,7 +176,6 @@ def fibonacci(df: pd.DataFrame, *, lookback: int = 100) -> FibLevels | None:
     if df is None or len(df) < 30:
         return None
     window = df.tail(lookback)
-    hi_idx = int(window["high"].astype(float).idxmax() == window["high"].index[-1]) if isinstance(window.index, pd.DatetimeIndex) else 0
     high = float(window["high"].max())
     low = float(window["low"].min())
     if high <= low:

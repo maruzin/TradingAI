@@ -121,7 +121,7 @@ class AnthropicProvider:
 
         # Lazy-imported here so the module isn't required when only embed() is used.
         try:
-            from anthropic import APIConnectionError, APIStatusError, RateLimitError
+            from anthropic import APIConnectionError, RateLimitError
             transient = (APIConnectionError, RateLimitError, httpx.TransportError, httpx.TimeoutException)
         except Exception:
             transient = (httpx.TransportError, httpx.TimeoutException)
@@ -481,7 +481,7 @@ _CITATION_NUDGE = (
 
 
 async def _ensure_citations(
-    provider: "LLMProvider",
+    provider: LLMProvider,
     response: LLMResponse,
     system: str,
     messages: list[Message],

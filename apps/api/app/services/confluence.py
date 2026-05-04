@@ -134,10 +134,7 @@ def per_tf_bias(df: pd.DataFrame, *, timeframe: str, symbol: str = "?") -> TFBia
         components["divergences"] = max(-1.0, min(1.0, div_signal / 2))
 
     # Aggregate the components into a single TF bias.
-    if components:
-        bias = sum(components.values()) / len(components)
-    else:
-        bias = 0.0
+    bias = sum(components.values()) / len(components) if components else 0.0
     return TFBias(timeframe=timeframe, bias=float(bias), components=components, notes=notes)
 
 

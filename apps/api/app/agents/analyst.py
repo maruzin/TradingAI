@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ..logging_setup import get_logger
-from ..services.coinglass import CoinglassClient
 from ..services.coingecko import CoinGeckoClient, TokenSnapshot
+from ..services.coinglass import CoinglassClient
 from ..services.confluence import confluence as compute_confluence
 from ..services.elliott import label as label_elliott
 from ..services.geopolitics import GdeltClient
@@ -41,6 +41,7 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 # whole-word for letter strings, raw for emoji/symbols. We strip these to
 # `[redacted]` rather than rejecting the brief — partial degradation is better
 # than no brief, and the redaction makes violations visible during eval.
+import contextlib
 import re as _re_banned
 
 BANNED_PATTERNS: list[tuple[str, _re_banned.Pattern[str]]] = [
@@ -134,7 +135,7 @@ class AnalystAgent:
     async def brief(self, token: str, horizon: str = "position") -> TokenBrief:
         import asyncio
         from datetime import timedelta
-        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        as_of = datetime.now(UTC).isoformat(timespec="seconds")
 
         # Fan-out the data pulls; macro is independent of token.
         snap, macro_snap = await asyncio.gather(
@@ -168,7 +169,7 @@ class AnalystAgent:
         elliott_block = "_(elliott unavailable)_"
         confluence_block = "_(MTF confluence unavailable)_"
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             fr = await self.historical.fetch_with_fallback(FetchSpec(
                 symbol=pair, exchange="binance", timeframe=tf,  # type: ignore[arg-type]
                 since_utc=now - timedelta(days=int(365 * years)), until_utc=now,
@@ -203,7 +204,7 @@ class AnalystAgent:
                 ell = label_elliott(fr.df)
                 elliott_block = ell.as_brief_block()
                 # Multi-TF confluence: pull 1d + 4h + 1h for the same pair.
-                frames: dict[str, "any"] = {tf: fr.df}
+                frames: dict[str, any] = {tf: fr.df}
                 for extra_tf in ("1d", "4h", "1h"):
                     if extra_tf == tf:
                         continue
@@ -329,10 +330,8 @@ class AnalystAgent:
         for c in (self.coingecko, self.macro, self.historical,
                    self.news, self.sentiment, self.onchain,
                    self.coinglass, self.gdelt):
-            try:
+            with contextlib.suppress(Exception):
                 await c.close()
-            except Exception:
-                pass
 
     async def __aenter__(self):
         return self

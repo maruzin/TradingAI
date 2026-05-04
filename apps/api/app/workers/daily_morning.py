@@ -20,7 +20,6 @@ from ..logging_setup import get_logger
 from ..notifications.telegram import TelegramMessage, TelegramSender
 from ..repositories import audit as audit_repo
 from ..repositories import daily_picks as picks_repo
-from ..repositories import users as users_repo
 
 log = get_logger("worker.daily_morning")
 

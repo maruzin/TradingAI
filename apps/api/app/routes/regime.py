@@ -14,7 +14,8 @@ from typing import Any
 from fastapi import APIRouter
 
 from ..logging_setup import get_logger
-from ..services.regime import RegimeSnapshot, snapshot as compute_snapshot
+from ..services.regime import RegimeSnapshot
+from ..services.regime import snapshot as compute_snapshot
 from ..services.sector_indices import snapshot as sector_snapshot
 
 router = APIRouter()

@@ -22,8 +22,7 @@ and the consumer should render those as "—" rather than guessing.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-
-import pandas as pd
+from datetime import UTC
 
 from .coingecko import CoinGeckoClient
 from .coinglass import CoinglassClient
@@ -72,8 +71,8 @@ async def snapshot() -> RegimeSnapshot:
     # --- BTC phase from Wyckoff on daily bars ---
     try:
         async with HistoricalClient() as h:
-            from datetime import datetime, timedelta, timezone
-            now = datetime.now(timezone.utc)
+            from datetime import datetime, timedelta
+            now = datetime.now(UTC)
             fr = await h.fetch_with_fallback(FetchSpec(
                 symbol="BTC/USDT", exchange="binance", timeframe="1d",  # type: ignore[arg-type]
                 since_utc=now - timedelta(days=400), until_utc=now,
@@ -106,8 +105,8 @@ async def snapshot() -> RegimeSnapshot:
     # --- ETH/BTC ratio + alt-season classifier ---
     try:
         async with HistoricalClient() as h2:
-            from datetime import datetime, timedelta, timezone
-            now = datetime.now(timezone.utc)
+            from datetime import datetime, timedelta
+            now = datetime.now(UTC)
             ethbtc = await h2.fetch_with_fallback(FetchSpec(
                 symbol="ETH/BTC", exchange="binance", timeframe="1d",  # type: ignore[arg-type]
                 since_utc=now - timedelta(days=120), until_utc=now,

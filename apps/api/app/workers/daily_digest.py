@@ -15,7 +15,7 @@ from typing import Any
 
 from .. import db
 from ..logging_setup import get_logger
-from ..notifications.telegram import TelegramMessage, TelegramSender, format_alert
+from ..notifications.telegram import TelegramMessage, TelegramSender
 from ..repositories import users as users_repo
 from ..services.coingecko import CoinGeckoClient
 
