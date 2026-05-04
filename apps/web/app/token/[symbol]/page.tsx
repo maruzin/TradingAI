@@ -383,9 +383,9 @@ function ForecastCard({
         Treat as one input — calibration metrics on{" "}
         <a href="/track-record" className="text-accent underline">track record</a>.
       </p>
-      {f.notes.length > 0 && (
+      {(f.notes ?? []).length > 0 && (
         <ul className="text-[10px] text-ink-soft list-disc pl-4">
-          {f.notes.map((n, i) => <li key={i}>{n}</li>)}
+          {(f.notes ?? []).map((n, i) => <li key={i}>{n}</li>)}
         </ul>
       )}
     </section>

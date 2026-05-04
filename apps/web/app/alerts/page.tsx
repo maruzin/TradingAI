@@ -41,8 +41,8 @@ function CreateRuleForm() {
       let token_id: string | undefined;
       if (tokenSym) {
         const wls = await api.watchlists();
-        for (const wl of wls.watchlists) {
-          const hit = wl.items.find((i) => i.symbol.toLowerCase() === tokenSym.toLowerCase()
+        for (const wl of (wls.watchlists ?? [])) {
+          const hit = (wl.items ?? []).find((i) => i.symbol.toLowerCase() === tokenSym.toLowerCase()
             || i.coingecko_id === tokenSym.toLowerCase());
           if (hit) { token_id = hit.id; break; }
         }

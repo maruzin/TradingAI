@@ -65,7 +65,14 @@ async def add_item(
     try:
         snap = await cg.snapshot(body.token)
     except ValueError as e:
-        raise HTTPException(404, detail=str(e)) from e
+        # CoinGecko explicitly told us the token doesn't exist → real 404
+        raise HTTPException(404, detail=f"token not found: {body.token}") from e
+    except Exception as e:
+        # Network / timeout / 5xx from CoinGecko — distinguish from "token
+        # missing" so the user knows it's worth retrying.
+        raise HTTPException(
+            503, detail=f"market data lookup failed: {type(e).__name__}",
+        ) from e
     finally:
         await cg.close()
 

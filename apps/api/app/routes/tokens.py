@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..agents.analyst import AnalystAgent
 from ..agents.projection import project as project_token
@@ -34,6 +34,24 @@ BRIEF_LIMIT_PER_DAY = 20
 BRIEF_WINDOW_SECONDS = 86_400
 
 
+def _rate_limit_id(request: Request, user: CurrentUser | None) -> str:
+    """Identify a rate-limit bucket — user.id when authed, else best-effort
+    client IP for anon. Avoids the `anon` global-bucket collision where many
+    anonymous callers share one quota.
+    """
+    if user is not None:
+        return user.id
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return f"anon:{fwd.split(',')[0].strip()}"
+    real = request.headers.get("x-real-ip")
+    if real:
+        return f"anon:{real.strip()}"
+    if request.client and request.client.host:
+        return f"anon:{request.client.host}"
+    return "anon:unknown"
+
+
 @router.get("/{symbol}/snapshot")
 async def get_snapshot(symbol: str) -> dict:
     """Live price + market data for a token. Hits CoinGecko, no LLM."""
@@ -50,6 +68,7 @@ async def get_snapshot(symbol: str) -> dict:
 @router.get("/{symbol}/brief")
 async def get_brief(
     symbol: str,
+    request: Request,
     user: Annotated[CurrentUser | None, Depends(get_optional_user)] = None,
     horizon: str = Query("position", pattern="^(swing|position|long)$"),
     fresh: bool = Query(False, description="Bypass cache and regenerate"),
@@ -77,7 +96,7 @@ async def get_brief(
     if user is None or not user.is_admin:
         try:
             enforce_rate_limit(
-                user_id=(user.id if user else "anon"),
+                user_id=_rate_limit_id(request, user),
                 action="brief",
                 limit=BRIEF_LIMIT_PER_DAY,
                 window_seconds=BRIEF_WINDOW_SECONDS,
@@ -198,6 +217,7 @@ def _diff_briefs(a: dict, b: dict | None) -> list[dict]:
 @router.get("/{symbol}/projection")
 async def get_projection(
     symbol: str,
+    request: Request,
     user: Annotated[CurrentUser | None, Depends(get_optional_user)] = None,
     timeframe: str = Query("1d", pattern="^(1h|4h|1d)$"),
 ) -> dict:
@@ -210,7 +230,7 @@ async def get_projection(
     if user is None or not user.is_admin:
         try:
             enforce_rate_limit(
-                user_id=(user.id if user else "anon"),
+                user_id=_rate_limit_id(request, user),
                 action="projection",
                 limit=5,
                 window_seconds=BRIEF_WINDOW_SECONDS,

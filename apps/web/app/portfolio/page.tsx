@@ -134,9 +134,9 @@ function RiskOverlay({ risk }: { risk: PortfolioRisk }) {
         </div>
       </div>
 
-      {risk.notes.length > 0 && (
+      {(risk.notes ?? []).length > 0 && (
         <ul className="text-xs space-y-1">
-          {risk.notes.map((n, i) => (
+          {(risk.notes ?? []).map((n, i) => (
             <li key={i} className="rounded border border-warn/30 bg-warn/5 p-2 text-warn">
               ⚠ {n}
             </li>

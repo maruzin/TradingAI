@@ -102,11 +102,11 @@ export function BriefView({
         <Markdown>{data.markdown}</Markdown>
       </article>
 
-      {data.sources.length > 0 && (
+      {(data.sources ?? []).length > 0 && (
         <section className="card">
-          <h2 className="font-medium">Sources ({data.sources.length})</h2>
+          <h2 className="font-medium">Sources ({(data.sources ?? []).length})</h2>
           <ol className="mt-2 space-y-1 text-sm list-decimal pl-5">
-            {data.sources.map((s, i) => (
+            {(data.sources ?? []).map((s, i) => (
               <li key={i}>
                 <a href={s.url} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">
                   {s.title || s.url}
